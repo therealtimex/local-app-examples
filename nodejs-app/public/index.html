@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RealtimeX SDK Demo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .log-entry { font-size: 11px; line-height: 1.4; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Header -->
+    <header class="bg-white border-b shadow-sm px-8 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-4">
+            <div class="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
+                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                </svg>
+            </div>
+            <h1 class="text-2xl font-bold text-gray-800">RealtimeX SDK Demo</h1>
+        </div>
+        <div class="flex items-center gap-6">
+            <div class="text-right">
+                <div id="app-name" class="text-sm font-medium text-gray-700">Loading...</div>
+                <div id="app-id" class="text-xs text-gray-500">ID: Loading...</div>
+            </div>
+            <button onclick="refreshAll()" class="p-2 hover:bg-gray-100 rounded-lg transition">
+                <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                </svg>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="p-8 flex gap-8">
+        <!-- LEFT: Activities -->
+        <div class="flex-1 space-y-6 min-w-[600px]">
+            <!-- Activities Table -->
+            <div class="bg-white rounded-xl shadow-sm border p-6">
+                <h2 class="text-lg font-bold text-blue-600 mb-4">1. Select an Activity</h2>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-4 py-3 text-left font-medium text-gray-600">ID</th>
+                                <th class="px-4 py-3 text-left font-medium text-gray-600">Type</th>
+                                <th class="px-4 py-3 text-left font-medium text-gray-600">Status</th>
+                                <th class="px-4 py-3 text-left font-medium text-gray-600">Created</th>
+                            </tr>
+                        </thead>
+                        <tbody id="activities-table" class="divide-y">
+                            <tr><td colspan="4" class="px-4 py-8 text-center text-gray-400">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="flex justify-end gap-2 mt-4">
+                    <button onclick="refreshActivities()" class="px-4 py-2 border rounded-lg hover:bg-gray-50 text-sm">Refresh</button>
+                    <button onclick="markCompleted()" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm">Mark Completed</button>
+                    <button onclick="deleteActivity()" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 text-sm">Delete</button>
+                </div>
+            </div>
+
+            <!-- Quick Insert -->
+            <div class="bg-white rounded-xl shadow-sm border p-6">
+                <h3 class="text-sm font-bold text-gray-700 mb-3">Quick Insert Activity</h3>
+                <div class="flex gap-2">
+                    <input id="new-activity-data" type="text" value='{"type": "task", "message": "hello"}' 
+                           class="flex-1 px-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    <button onclick="insertActivity()" class="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm">Insert</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT: Trigger Panel -->
+        <div class="w-[400px] space-y-6">
+            <!-- Agents -->
+            <div class="bg-white rounded-xl shadow-sm border p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-bold text-blue-600">2. AI Agents</h2>
+                    <button onclick="fetchAgents()" class="p-1 hover:bg-gray-100 rounded">
+                        <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                    </button>
+                </div>
+                <select id="agent-select" class="w-full px-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+                    <option value="">Select an agent...</option>
+                </select>
+            </div>
+
+            <!-- Workspaces & Threads -->
+            <div class="bg-white rounded-xl shadow-sm border p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-bold text-blue-600">3. Context</h2>
+                    <button onclick="fetchWorkspaces()" class="p-1 hover:bg-gray-100 rounded">
+                        <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                    </button>
+                </div>
+                <select id="workspace-select" onchange="fetchThreads()" class="w-full px-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 mb-3">
+                    <option value="">Select a workspace...</option>
+                </select>
+                <select id="thread-select" class="w-full px-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+                    <option value="create_new">➕ Create New Thread</option>
+                </select>
+            </div>
+
+            <!-- Trigger -->
+            <div class="bg-white rounded-xl shadow-sm border-2 border-blue-500 p-6">
+                <h2 class="text-lg font-bold text-blue-600 mb-4">4. Trigger Configuration</h2>
+                <textarea id="prompt-input" rows="3" placeholder="Instructions for Agent..." 
+                          class="w-full px-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 mb-4">Please look into this activity.</textarea>
+                <button onclick="triggerAgent()" class="w-full py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-bold flex items-center justify-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                    </svg>
+                    TRIGGER AGENT NOW
+                </button>
+            </div>
+
+            <!-- Logs -->
+            <div class="bg-gray-900 rounded-xl shadow-sm p-4">
+                <h3 class="text-xs font-bold text-gray-400 mb-2">SDK Output</h3>
+                <div id="logs" class="h-48 overflow-y-auto text-gray-300 font-mono text-xs space-y-1">
+                    <div class="text-gray-500">Initializing...</div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // State
+        let selectedActivity = null;
+        let activities = [];
+        let agents = [];
+        let workspaces = [];
+        let threads = [];
+
+        // Logging
+        function addLog(msg) {
+            const now = new Date().toLocaleTimeString('en-US', { hour12: false });
+            const logs = document.getElementById('logs');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.textContent = `[${now}] ${msg}`;
+            logs.insertBefore(entry, logs.firstChild);
+            if (logs.children.length > 50) logs.removeChild(logs.lastChild);
+        }
+
+        // API calls
+        async function api(method, path, body = null) {
+            const opts = { method, headers: { 'Content-Type': 'application/json' } };
+            if (body) opts.body = JSON.stringify(body);
+            const res = await fetch(path, opts);
+            return res.json();
+        }
+
+        // Load app info
+        async function loadAppInfo() {
+            const data = await api('GET', '/api/info');
+            document.getElementById('app-name').textContent = `App: ${data.app_name}`;
+            document.getElementById('app-id').textContent = `ID: ${data.app_id}`;
+        }
+
+        // Activities
+        async function refreshActivities() {
+            addLog('Fetching activities...');
+            const data = await api('GET', '/api/activities');
+            activities = data.activities || [];
+            renderActivities();
+            addLog(`Loaded ${activities.length} activities`);
+        }
+
+        function renderActivities() {
+            const tbody = document.getElementById('activities-table');
+            if (activities.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-8 text-center text-gray-400">No activities</td></tr>';
+                return;
+            }
+            tbody.innerHTML = activities.map(a => {
+                const type = a.raw_data?.type || 'N/A';
+                const time = a.created_at?.substring(0, 19).replace('T', ' ') || '';
+                const selected = selectedActivity?.id === a.id;
+                return `
+                    <tr onclick="selectActivity('${a.id}')" class="cursor-pointer hover:bg-blue-50 ${selected ? 'bg-blue-100' : ''}">
+                        <td class="px-4 py-3 font-mono text-xs">${a.id.substring(0, 8)}...</td>
+                        <td class="px-4 py-3">${type}</td>
+                        <td class="px-4 py-3"><span class="px-2 py-1 rounded text-xs ${a.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-gray-100'}">${a.status || 'pending'}</span></td>
+                        <td class="px-4 py-3 text-gray-500">${time}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function selectActivity(id) {
+            selectedActivity = activities.find(a => a.id === id);
+            addLog(`Selected: ${id}`);
+            renderActivities();
+        }
+
+        async function insertActivity() {
+            const input = document.getElementById('new-activity-data');
+            try {
+                const rawData = JSON.parse(input.value);
+                const data = await api('POST', '/api/activities', { raw_data: rawData });
+                if (data.success) {
+                    addLog(`Created activity: ${data.activity.id}`);
+                    await refreshActivities();
+                } else {
+                    addLog(`Error: ${data.error}`);
+                }
+            } catch (e) {
+                addLog(`Invalid JSON: ${e.message}`);
+            }
+        }
+
+        async function markCompleted() {
+            if (!selectedActivity) { addLog('Select an activity first'); return; }
+            const data = await api('PATCH', `/api/activities/${selectedActivity.id}`, { status: 'completed' });
+            if (data.success) {
+                addLog(`Marked ${selectedActivity.id} as completed`);
+                await refreshActivities();
+            }
+        }
+
+        async function deleteActivity() {
+            if (!selectedActivity) { addLog('Select an activity first'); return; }
+            const data = await api('DELETE', `/api/activities/${selectedActivity.id}`);
+            if (data.success) {
+                addLog(`Deleted ${selectedActivity.id}`);
+                selectedActivity = null;
+                await refreshActivities();
+            }
+        }
+
+        // Agents
+        async function fetchAgents() {
+            addLog('Fetching agents...');
+            const data = await api('GET', '/api/agents');
+            agents = data.agents || [];
+            const select = document.getElementById('agent-select');
+            select.innerHTML = '<option value="">Select an agent...</option>' + 
+                agents.map(a => `<option value="${a.slug}">${a.name}</option>`).join('');
+            addLog(`Loaded ${agents.length} agents`);
+        }
+
+        // Workspaces
+        async function fetchWorkspaces() {
+            addLog('Fetching workspaces...');
+            const data = await api('GET', '/api/workspaces');
+            workspaces = data.workspaces || [];
+            const select = document.getElementById('workspace-select');
+            select.innerHTML = '<option value="">Select a workspace...</option>' + 
+                workspaces.map(w => `<option value="${w.slug}">${w.name}</option>`).join('');
+            addLog(`Loaded ${workspaces.length} workspaces`);
+        }
+
+        // Threads
+        async function fetchThreads() {
+            const wsSlug = document.getElementById('workspace-select').value;
+            const select = document.getElementById('thread-select');
+            select.innerHTML = '<option value="create_new">➕ Create New Thread</option>';
+            if (!wsSlug) return;
+            
+            addLog(`Fetching threads for ${wsSlug}...`);
+            const data = await api('GET', `/api/workspaces/${wsSlug}/threads`);
+            threads = data.threads || [];
+            select.innerHTML = '<option value="create_new">➕ Create New Thread</option>' + 
+                threads.map(t => `<option value="${t.slug}">${t.name}</option>`).join('');
+            addLog(`Loaded ${threads.length} threads`);
+        }
+
+        // Trigger
+        async function triggerAgent() {
+            if (!selectedActivity) { addLog('ERROR: Select an activity first'); return; }
+            const agent = document.getElementById('agent-select').value;
+            const workspace = document.getElementById('workspace-select').value;
+            const thread = document.getElementById('thread-select').value;
+            const prompt = document.getElementById('prompt-input').value;
+
+            if (!agent || !workspace) { addLog('ERROR: Select agent and workspace'); return; }
+
+            addLog(`Triggering ${agent}...`);
+            const data = await api('POST', '/api/trigger', {
+                raw_data: selectedActivity.raw_data,
+                agent_name: agent,
+                workspace_slug: workspace,
+                thread_slug: thread,
+                prompt: prompt,
+            });
+
+            if (data.success) {
+                addLog(`SUCCESS! Task UUID: ${data.task_uuid}`);
+            } else {
+                addLog(`FAILED: ${data.error}`);
+            }
+        }
+
+        // Refresh all
+        async function refreshAll() {
+            await Promise.all([refreshActivities(), fetchAgents(), fetchWorkspaces()]);
+        }
+
+        // Init
+        window.onload = async () => {
+            await loadAppInfo();
+            await refreshAll();
+            addLog('Ready!');
+        };
+    </script>
+</body>
+</html>

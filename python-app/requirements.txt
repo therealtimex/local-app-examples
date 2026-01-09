@@ -1,0 +1,4 @@
+realtimex-sdk
+nicegui
+httpx
+python-dotenv
