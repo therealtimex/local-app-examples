@@ -110,53 +110,82 @@ async def fetch_threads(workspace_slug: str):
 # --- Trigger Action ---
 
 def on_activity_selected(e):
-    """Handle table row selection"""
-    add_log(f"DEBUG: Selection event received: {e.args}")
+    """Handle table row selection - auto-fill raw_data input"""
     rows = e.args.get('rows', []) if isinstance(e.args, dict) else e.args
     if rows and len(rows) > 0:
         state.selected_activity = rows[0]
-        add_log(f"DEBUG: Selected activity: {state.selected_activity.get('id')}")
+        add_log(f"Selected activity: {state.selected_activity.get('id')}")
+        # Auto-fill raw_data input
+        if 'raw_data_input' in globals() and state.selected_activity.get('raw_data'):
+            raw_data_input.value = json.dumps(state.selected_activity.get('raw_data', {}), indent=2)
     else:
         state.selected_activity = None
-        add_log("DEBUG: Selection cleared")
 
 async def trigger_agent():
-    add_log(f"DEBUG: trigger_agent called, selected_activity = {state.selected_activity}")
+    auto_run = auto_run_switch.value
     
-    # Also check from table's selected property as fallback
-    if not state.selected_activity and activities_table.selected:
-        add_log(f"DEBUG: Using table.selected fallback: {activities_table.selected}")
-        state.selected_activity = activities_table.selected[0]
-    
-    if not state.selected_activity:
-        add_log("DEBUG: No activity selected!")
-        ui.notify("Please select an activity from the table first", type='warning')
-        return
-    if not agent_select.value or not ws_select.value:
-        ui.notify("Please select Agent and Workspace", type='warning')
+    # Auto mode requires agent and workspace
+    if auto_run and (not agent_select.value or not ws_select.value):
+        ui.notify("Auto mode requires selecting Agent and Workspace", type='warning')
         return
     
     try:
-        add_log(f"Triggering {agent_select.value} for activity {state.selected_activity['id']}...")
-        result = await sdk.webhook.trigger_agent(
-            raw_data=state.selected_activity.get('raw_data', {}),
-            auto_run=True,
-            agent_name=agent_select.value,
-            workspace_slug=ws_select.value,
-            thread_slug=thread_select.value,
-            prompt=prompt_input.value or "Process this item"
-        )
+        # Parse raw_data from input field
+        raw_data = json.loads(raw_data_input.value) if raw_data_input.value else {}
+    except json.JSONDecodeError as e:
+        ui.notify(f"Invalid JSON in Raw Data: {e}", type='negative')
+        return
+    
+    try:
+        mode = "auto" if auto_run else "manual"
+        add_log(f"Triggering ({mode} mode)...")
+        
+        # Build parameters based on mode
+        params = {
+            "raw_data": raw_data,
+            "auto_run": auto_run,
+            "prompt": prompt_input.value or "Process this item"
+        }
+        
+        # Only include agent info for auto mode
+        if auto_run:
+            params["agent_name"] = agent_select.value
+            params["workspace_slug"] = ws_select.value
+            params["thread_slug"] = thread_select.value
+        
+        result = await sdk.webhook.trigger_agent(**params)
+        
         add_log(f"SUCCESS! Task UUID: {result.get('task_uuid')}")
-        ui.notify("Agent Triggered Successfully!", type='positive')
+        msg = "Agent Triggered!" if auto_run else "Calendar Event Created!"
+        ui.notify(msg, type='positive')
     except Exception as e:
         add_log(f"Trigger failed: {e}")
         ui.notify(f"Trigger failed: {e}", type='negative')
+
+async def fetch_task_status():
+    uuid = task_uuid_input.value.strip()
+    if not uuid:
+        ui.notify("Enter a task UUID", type='warning')
+        return
+    
+    try:
+        add_log(f"Fetching task {uuid}...")
+        task = await sdk.api.get_task(uuid)
+        status = task.get('status', 'unknown')
+        source = task.get('sourceAppName') or task.get('sourceApp', '-')
+        created = (task.get('createdAt', '')[:19].replace('T', ' ')) if task.get('createdAt') else '-'
+        
+        task_status_label.set_text(f"Status: {status} | Source: {source} | Created: {created}")
+        add_log(f"Task {uuid}: {status}")
+    except Exception as e:
+        add_log(f"Fetch failed: {e}")
+        ui.notify(f"Fetch failed: {e}", type='negative')
 
 # --- UI Components ---
 
 @ui.page('/')
 async def main_page():
-    global log_area, activities_table, agent_select, ws_select, thread_select, prompt_input, selected_label
+    global log_area, activities_table, agent_select, ws_select, thread_select, prompt_input, raw_data_input, auto_run_switch, trigger_btn, task_uuid_input, task_status_label
 
     ui.colors(primary='#3b82f6', secondary='#10b981', accent='#f59e0b')
     
@@ -221,15 +250,35 @@ async def main_page():
             # --- TRIGGER SECTION ---
             with ui.card().classes('w-full border-2 border-primary'):
                 ui.label('4. Trigger Configuration').classes('text-lg font-bold text-primary')
+                
+                # Auto/Manual Toggle
+                with ui.row().classes('w-full items-center gap-4 mb-4 p-3 bg-gray-100 rounded'):
+                    auto_run_switch = ui.switch('Auto-run Mode', value=True)
+                    with ui.column().classes('gap-0'):
+                        ui.label().bind_text_from(auto_run_switch, 'value', 
+                            lambda v: 'Agent will be triggered immediately' if v else 'Creates calendar event for later review'
+                        ).classes('text-xs text-gray-600')
+                
+                raw_data_input = ui.textarea(label='Raw Data (JSON)', value='{"type": "task", "message": "hello"}').classes('w-full font-mono')
                 prompt_input = ui.textarea(label='Instructions for Agent', value='Please look into this activity.').classes('w-full')
                 
                 with ui.row().classes('w-full items-center gap-2 mt-4'):
-                    ui.button('TRIGGER AGENT NOW', icon='bolt', on_click=trigger_agent).classes('flex-1 py-4').props('size=lg')
+                    trigger_btn = ui.button('TRIGGER AGENT NOW', icon='bolt', on_click=trigger_agent).classes('flex-1 py-4').props('size=lg')
+                    # Update button text based on mode
+                    auto_run_switch.on_value_change(lambda e: trigger_btn.set_text('TRIGGER AGENT NOW' if e.value else 'CREATE CALENDAR EVENT'))
 
             # --- LOGS ---
             with ui.card().classes('w-full bg-slate-900 text-slate-100 font-mono'):
                 ui.label('SDK Output').classes('text-xs font-bold text-slate-400')
                 log_area = ui.markdown('').classes('text-[10px] overflow-auto h-48 w-full')
+            
+            # --- TASK STATUS QUERY ---
+            with ui.card().classes('w-full'):
+                ui.label('5. Task Status Query').classes('text-lg font-bold text-purple-600')
+                with ui.row().classes('w-full items-center gap-2'):
+                    task_uuid_input = ui.input(label='Task UUID', placeholder='Enter task UUID...').classes('flex-1 font-mono')
+                    ui.button('Fetch', icon='search', on_click=fetch_task_status).props('color=purple')
+                task_status_label = ui.label('').classes('text-sm text-gray-600 mt-2')
 
     # Initial load
     await asyncio.gather(refresh_activities(), fetch_agents(), fetch_workspaces())

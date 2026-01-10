@@ -94,13 +94,13 @@ app.get('/api/workspaces/:slug/threads', async (req: Request, res: Response) => 
 // POST /api/trigger - Trigger agent
 app.post('/api/trigger', async (req: Request, res: Response) => {
     try {
-        const { raw_data, agent_name, workspace_slug, thread_slug, prompt } = req.body;
+        const { raw_data, agent_name, workspace_slug, thread_slug, prompt, auto_run = true } = req.body;
         const result = await sdk.webhook.triggerAgent({
             raw_data,
-            auto_run: true,
-            agent_name,
-            workspace_slug,
-            thread_slug: thread_slug || 'create_new',
+            auto_run,
+            agent_name: auto_run ? agent_name : undefined,
+            workspace_slug: auto_run ? workspace_slug : undefined,
+            thread_slug: auto_run && thread_slug ? thread_slug : undefined,
             prompt: prompt || 'Process this item',
         });
         res.json(result);
@@ -115,6 +115,17 @@ app.get('/api/info', (req: Request, res: Response) => {
         app_name: process.env.RTX_APP_NAME || 'Node.js Demo',
         app_id: process.env.RTX_APP_ID || 'Not set',
     });
+});
+
+// GET /api/tasks/:uuid - Get task status by UUID
+app.get('/api/tasks/:uuid', async (req: Request, res: Response) => {
+    try {
+        const { uuid } = req.params;
+        const task = await sdk.api.getTask(uuid);
+        res.json({ success: true, task });
+    } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+    }
 });
 
 // Start server
