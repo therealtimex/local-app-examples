@@ -284,4 +284,7 @@ async def main_page():
     await asyncio.gather(refresh_activities(), fetch_agents(), fetch_workspaces())
 
 if __name__ in {"__main__", "__mp_main__"}:
-    ui.run(title='RealtimeX SDK Demo', port=8080)
+    # Get available port (auto-detects or finds free port if conflict)
+    port = sdk.port.get_port()
+    ui.run(title='RealtimeX SDK Demo', port=port)
+
