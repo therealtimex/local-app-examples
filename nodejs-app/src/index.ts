@@ -1,13 +1,23 @@
 import express, { Request, Response } from 'express';
 import path from 'path';
-import { RealtimeXSDK } from '@realtimex/sdk';
+import { RealtimeXSDK, PermissionDeniedError } from '@realtimex/sdk';
 
 const app = express();
 
-// Initialize SDK (Auto-detects RTX_APP_ID from environment)
-const sdk = new RealtimeXSDK();
+// Initialize SDK with declared permissions (Manifest-based)
+// These permissions will be requested when the app starts
+// If an undeclared permission is needed at runtime, user will be prompted
+const sdk = new RealtimeXSDK({
+    permissions: [
+        'api.agents',      // Required to list agents
+        'api.workspaces',  // Required to list workspaces
+        'api.threads',     // Required to list threads
+        'webhook.trigger', // Required to trigger agents
+        'activities.read', // Required to read activities
+        'activities.write', // Required to write activities
+    ],
+});
 
-// Get available port (auto-detects or finds free port if conflict)
 const startServer = async () => {
     const PORT = await sdk.port.getPort();
 

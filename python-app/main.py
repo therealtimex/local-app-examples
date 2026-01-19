@@ -4,10 +4,21 @@ import json
 from datetime import datetime
 from typing import List, Dict, Any
 from nicegui import ui, app
-from realtimex_sdk import RealtimeXSDK
+from realtimex_sdk import RealtimeXSDK, SDKConfig, PermissionDeniedError
 
-# Initialize SDK (Auto-detects from environment)
-sdk = RealtimeXSDK()
+# Initialize SDK with declared permissions (Manifest-based)
+# These permissions will be requested when the app starts
+# If an undeclared permission is needed at runtime, user will be prompted
+sdk = RealtimeXSDK(config=SDKConfig(
+    permissions=[
+        'api.agents',      # Required to list agents
+        'api.workspaces',  # Required to list workspaces
+        'api.threads',     # Required to list threads
+        'webhook.trigger', # Required to trigger agents
+        'activities.read', # Required to read activities
+        'activities.write', # Required to write activities
+    ]
+))
 
 # --- State Management ---
 class State:
@@ -280,7 +291,7 @@ async def main_page():
                     ui.button('Fetch', icon='search', on_click=fetch_task_status).props('color=purple')
                 task_status_label = ui.label('').classes('text-sm text-gray-600 mt-2')
 
-    # Initial load
+    # Initial load (manifest permission registration is handled automatically by SDK)
     await asyncio.gather(refresh_activities(), fetch_agents(), fetch_workspaces())
 
 if __name__ in {"__main__", "__mp_main__"}:
