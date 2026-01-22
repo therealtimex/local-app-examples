@@ -184,8 +184,10 @@
     "@nodelib/fs.scandir" "2.1.5"
     fastq "^1.6.0"
 
-"@realtimex/sdk@file:../../rtx-local-app-sdk/typescript":
-  version "1.1.0"
+"@realtimex/sdk@^1.1.1":
+  version "1.1.1"
+  resolved "https://registry.yarnpkg.com/@realtimex/sdk/-/sdk-1.1.1.tgz#95b9bceffd1f8b223188a2377d4c5e80f19328c2"
+  integrity sha512-6hNhdT41M9ZceoQ4JZMHljCU/4uIHIsqcXLprmlFhuJWek9I9q+LdMGLCxO+zy04XjSeS434B+zRzLM23QakDg==
 
 "@types/body-parser@*":
   version "1.19.6"

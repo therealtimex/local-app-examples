@@ -9,7 +9,7 @@
         "start": "node dist/index.js"
     },
     "dependencies": {
-        "@realtimex/sdk": "file:../../rtx-local-app-sdk/typescript",
+        "@realtimex/sdk": "^1.1.1",
         "express": "^4.18.2"
     },
     "devDependencies": {
