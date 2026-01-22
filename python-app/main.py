@@ -2,21 +2,16 @@ import os
 import asyncio
 import json
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from nicegui import ui, app
-from realtimex_sdk import RealtimeXSDK, SDKConfig, PermissionDeniedError
+from realtimex_sdk import RealtimeXSDK, SDKConfig, PermissionDeniedError, LLMProviderError, LLMPermissionError
 
-# Initialize SDK with declared permissions (Manifest-based)
-# These permissions will be requested when the app starts
-# If an undeclared permission is needed at runtime, user will be prompted
+# Initialize SDK with all permissions
 sdk = RealtimeXSDK(config=SDKConfig(
     permissions=[
-        'api.agents',      # Required to list agents
-        'api.workspaces',  # Required to list workspaces
-        'api.threads',     # Required to list threads
-        'webhook.trigger', # Required to trigger agents
-        'activities.read', # Required to read activities
-        'activities.write', # Required to write activities
+        'api.agents', 'api.workspaces', 'api.threads', 'api.task',
+        'webhook.trigger', 'activities.read', 'activities.write',
+        'llm.chat', 'llm.embed', 'llm.providers', 'vectors.read', 'vectors.write'
     ]
 ))
 
@@ -26,15 +21,21 @@ class State:
     agents: List[Dict[str, Any]] = []
     workspaces: List[Dict[str, Any]] = []
     threads: List[Dict[str, Any]] = []
-    selected_activity: Dict[str, Any] = None
     logs: List[str] = []
+    providers: Dict[str, Any] = {}
+    chat_model: str = ""
+    embed_model: str = ""
 
 state = State()
 
-def add_log(msg: str):
+def add_log(msg: str, type: str = 'info'):
     timestamp = datetime.now().strftime("%H:%M:%S")
-    state.logs.append(f"[{timestamp}] {msg}")
-    if len(state.logs) > 50:
+    color = "white"
+    if type == 'error': color = "red-400"
+    elif type == 'success': color = "green-400"
+    
+    state.logs.append(f'<span class="text-{color}">[{timestamp}] {msg}</span>')
+    if len(state.logs) > 100:
         state.logs.pop(0)
     if 'log_area' in globals():
         log_area.set_content("\n".join(state.logs[::-1]))
@@ -44,258 +45,436 @@ def add_log(msg: str):
 async def refresh_activities():
     try:
         raw_activities = await sdk.activities.list(limit=20)
-        processed = []
-        for r in raw_activities:
-            processed.append({
-                **r,
-                'display_type': r.get('raw_data', {}).get('type', 'N/A'),
-                'display_time': r.get('created_at', '')[:19].replace('T', ' ')
-            })
-        state.activities = processed
+        state.activities = [{
+            **r,
+            'display_type': r.get('raw_data', {}).get('type', 'N/A'),
+            'display_time': r.get('created_at', '')[:19].replace('T', ' ')
+        } for r in raw_activities]
         activities_table.update_rows(state.activities)
-        add_log("Activities refreshed")
+        add_log(f"Loaded {len(state.activities)} activities", 'success')
     except Exception as e:
-        add_log(f"Error fetching activities: {e}")
+        add_log(f"Error fetching activities: {e}", 'error')
 
 async def create_activity(data_str: str):
     try:
         data = json.loads(data_str)
         activity = await sdk.activities.insert(data)
-        add_log(f"Created activity: {activity.get('id')}")
+        add_log(f"Created activity: {activity.get('id')}", 'success')
         await refresh_activities()
     except Exception as e:
-        ui.notify(f"Invalid JSON: {e}", type='negative')
+        add_log(f"Create error: {e}", 'error')
 
 async def update_activity(id: str, status: str):
     try:
         await sdk.activities.update(id, {"status": status})
-        add_log(f"Updated status to {status} for {id}")
+        add_log(f"Updated {id[:8]} to {status}", 'success')
         await refresh_activities()
     except Exception as e:
-        add_log(f"Error updating: {e}")
+        add_log(f"Update error: {e}", 'error')
 
 async def delete_activity(id: str):
     try:
         await sdk.activities.delete(id)
-        add_log(f"Deleted activity {id}")
+        add_log(f"Deleted {id[:8]}", 'success')
         await refresh_activities()
     except Exception as e:
-        add_log(f"Error deleting: {e}")
-
-# --- Metadata Actions ---
+        add_log(f"Delete error: {e}", 'error')
 
 async def fetch_agents():
     try:
         state.agents = await sdk.api.get_agents()
         agent_select.options = {a['slug']: a['name'] for a in state.agents}
         agent_select.update()
-        add_log(f"Fetched {len(state.agents)} agents")
+        add_log(f"Fetched {len(state.agents)} agents", 'success')
     except Exception as e:
-        add_log(f"Error fetching agents: {e}")
+        add_log(f"Error fetching agents: {e}", 'error')
 
 async def fetch_workspaces():
     try:
         state.workspaces = await sdk.api.get_workspaces()
         ws_select.options = {w['slug']: w['name'] for w in state.workspaces}
         ws_select.update()
-        add_log(f"Fetched {len(state.workspaces)} workspaces")
+        add_log(f"Fetched {len(state.workspaces)} workspaces", 'success')
     except Exception as e:
-        add_log(f"Error fetching workspaces: {e}")
+        add_log(f"Error fetching workspaces: {e}", 'error')
 
 async def fetch_threads(workspace_slug: str):
-    if not workspace_slug:
-        thread_select.options = {'create_new': '➕ Create New Thread'}
-        thread_select.update()
-        return
+    if not workspace_slug: return
     try:
-        state.threads = await sdk.api.get_threads(workspace_slug)
-        # Always include "create_new" option at the top
+        threads = await sdk.api.get_threads(workspace_slug)
         options = {'create_new': '➕ Create New Thread'}
-        options.update({t['slug']: t['name'] for t in state.threads})
+        options.update({t['slug']: t['name'] for t in threads})
         thread_select.options = options
         thread_select.update()
-        add_log(f"Fetched {len(state.threads)} threads for {workspace_slug}")
+        add_log(f"Fetched {len(threads)} threads", 'success')
     except Exception as e:
-        add_log(f"Error fetching threads: {e}")
-
-# --- Trigger Action ---
-
-def on_activity_selected(e):
-    """Handle table row selection - auto-fill raw_data input"""
-    rows = e.args.get('rows', []) if isinstance(e.args, dict) else e.args
-    if rows and len(rows) > 0:
-        state.selected_activity = rows[0]
-        add_log(f"Selected activity: {state.selected_activity.get('id')}")
-        # Auto-fill raw_data input
-        if 'raw_data_input' in globals() and state.selected_activity.get('raw_data'):
-            raw_data_input.value = json.dumps(state.selected_activity.get('raw_data', {}), indent=2)
-    else:
-        state.selected_activity = None
+        add_log(f"Error fetching threads: {e}", 'error')
 
 async def trigger_agent():
     auto_run = auto_run_switch.value
-    
-    # Auto mode requires agent and workspace
     if auto_run and (not agent_select.value or not ws_select.value):
-        ui.notify("Auto mode requires selecting Agent and Workspace", type='warning')
+        ui.notify("Select Agent and Workspace", type='warning')
         return
-    
     try:
-        # Parse raw_data from input field
         raw_data = json.loads(raw_data_input.value) if raw_data_input.value else {}
-    except json.JSONDecodeError as e:
-        ui.notify(f"Invalid JSON in Raw Data: {e}", type='negative')
-        return
-    
-    try:
-        mode = "auto" if auto_run else "manual"
-        add_log(f"Triggering ({mode} mode)...")
-        
-        # Build parameters based on mode
-        params = {
-            "raw_data": raw_data,
-            "auto_run": auto_run,
-            "prompt": prompt_input.value or "Process this item"
-        }
-        
-        # Only include agent info for auto mode
-        if auto_run:
-            params["agent_name"] = agent_select.value
-            params["workspace_slug"] = ws_select.value
-            params["thread_slug"] = thread_select.value
-        
-        result = await sdk.webhook.trigger_agent(**params)
-        
-        add_log(f"SUCCESS! Task UUID: {result.get('task_uuid')}")
-        msg = "Agent Triggered!" if auto_run else "Calendar Event Created!"
-        ui.notify(msg, type='positive')
+        add_log(f"Triggering ({'auto' if auto_run else 'manual'})...")
+        result = await sdk.webhook.trigger_agent(
+            raw_data=raw_data,
+            auto_run=auto_run,
+            prompt=prompt_input.value,
+            agent_name=agent_select.value if auto_run else None,
+            workspace_slug=ws_select.value if auto_run else None,
+            thread_slug=thread_select.value if auto_run and thread_select.value != 'create_new' else None
+        )
+        add_log(f"SUCCESS! Task: {result.get('task_uuid')}", 'success')
+        task_uuid_input.value = result.get('task_uuid')
     except Exception as e:
-        add_log(f"Trigger failed: {e}")
-        ui.notify(f"Trigger failed: {e}", type='negative')
+        add_log(f"Trigger failed: {e}", 'error')
 
 async def fetch_task_status():
     uuid = task_uuid_input.value.strip()
-    if not uuid:
-        ui.notify("Enter a task UUID", type='warning')
-        return
-    
+    if not uuid: return
     try:
-        add_log(f"Fetching task {uuid}...")
         task = await sdk.api.get_task(uuid)
         status = task.get('status', 'unknown')
-        source = task.get('sourceAppName') or task.get('sourceApp', '-')
-        created = (task.get('createdAt', '')[:19].replace('T', ' ')) if task.get('createdAt') else '-'
-        
-        task_status_label.set_text(f"Status: {status} | Source: {source} | Created: {created}")
-        add_log(f"Task {uuid}: {status}")
+        task_status_label.set_text(f"Status: {status} | Source: {task.get('sourceAppName', '-')}")
+        add_log(f"Task {uuid[:8]}: {status}", 'success')
     except Exception as e:
-        add_log(f"Fetch failed: {e}")
-        ui.notify(f"Fetch failed: {e}", type='negative')
+        add_log(f"Fetch failed: {e}", 'error')
 
-# --- UI Components ---
+async def fetch_vector_workspaces():
+    try:
+        res = await sdk.llm.vectors.list_workspaces()
+        if res.success:
+            workspaces = res.workspaces
+            if 'default' not in workspaces:
+                workspaces = ['default'] + workspaces
+            vector_workspace_id.options = workspaces
+            vector_workspace_id.update()
+            add_log(f"Fetched {len(workspaces)} vector workspaces", 'success')
+    except Exception as e:
+        add_log(f"Error fetching vector workspaces: {e}", 'error')
+
+# --- LLM Actions ---
+
+async def fetch_providers():
+    try:
+        add_log("Fetching available models...")
+        res = await sdk.llm.get_providers()
+        state.providers = res
+        
+        # Build options for chat
+        chat_opts = {}
+        for p in res.get('llm', []):
+            provider_name = p.get('provider')
+            for m in p.get('models', []):
+                val = f"{provider_name}/{m['id']}"
+                chat_opts[val] = f"[{provider_name}] {m['id']}"
+        chat_model_select.options = chat_opts
+        chat_model_select.update()
+
+        # Build options for embedding
+        embed_opts = {}
+        for p in res.get('embedding', []):
+            provider_name = p.get('provider')
+            for m in p.get('models', []):
+                val = f"{provider_name}/{m['id']}"
+                embed_opts[val] = f"[{provider_name}] {m['id']}"
+        embed_model_select.options = embed_opts
+        embed_model_select.update()
+
+        providers_label.set_text(f"Loaded {len(chat_opts)} LLM models and {len(embed_opts)} Embed models.")
+        await fetch_vector_workspaces()
+        add_log(f"Loaded {len(chat_opts) + len(embed_opts)} models", 'success')
+    except Exception as e:
+        add_log(f"Providers error: {e}", 'error')
+
+async def send_chat():
+    try:
+        messages = json.loads(chat_messages.value)
+        chat_resp_area.set_visibility(True)
+        chat_resp_area.set_content("Thinking...")
+        
+        provider = None
+        model = None
+        if chat_model_select.value:
+            provider, model = chat_model_select.value.split('/', 1)
+
+        if chat_stream_switch.value:
+            add_log("Starting streaming chat...")
+            chat_resp_area.set_content("")
+            async for chunk in sdk.llm.chat_stream(messages, model=model, provider=provider):
+                if chunk.text:
+                    chat_resp_area.content += chunk.text
+                    chat_resp_area.update()
+            add_log("Stream complete", 'success')
+        else:
+            add_log("Sending chat request...")
+            res = await sdk.llm.chat(messages, model=model, provider=provider)
+            chat_resp_area.set_content(res.get('response', {}).get('content', 'No content'))
+            add_log("Chat complete", 'success')
+    except Exception as e:
+        handle_llm_error(e)
+
+async def generate_embedding():
+    try:
+        add_log("Generating embedding...")
+        provider = None
+        model = None
+        if embed_model_select.value:
+            provider, model = embed_model_select.value.split('/', 1)
+            
+        res = await sdk.llm.embed(embed_input.value, provider=provider, model=model)
+        vec = res.get('embeddings', [[]])[0]
+        embed_res_area.set_visibility(True)
+        embed_res_area.set_content(f"Dims: {res.get('dimensions')}\nFirst 5: {vec[:5]}")
+        add_log(f"Embedding generated ({res.get('dimensions')}d)", 'success')
+    except Exception as e:
+        handle_llm_error(e)
+
+async def embed_and_store():
+    try:
+        texts = [t.strip() for t in embed_store_texts.value.split('\n') if t.strip()]
+        add_log(f"Embedding and storing {len(texts)} texts...")
+        
+        provider = None
+        model = None
+        if embed_model_select.value:
+            provider, model = embed_model_select.value.split('/', 1)
+            
+        res = await sdk.llm.embed_and_store(
+            texts, 
+            document_id=embed_store_doc_id.value or None,
+            workspace_id=vector_workspace_id.value or None,
+            provider=provider,
+            model=model
+        )
+        vector_res_area.set_visibility(True)
+        vector_res_area.set_content(f"**Success!** Stored {len(texts)} items.")
+        add_log("Store success", 'success')
+        vector_panels.value = 'search'
+    except Exception as e:
+        handle_llm_error(e)
+
+async def semantic_search():
+    try:
+        query = search_query.value
+        top_k = int(search_top_k.value or 3)
+        add_log(f"Searching for: {query[:30]}...")
+        
+        provider = None
+        model = None
+        if embed_model_select.value:
+            provider, model = embed_model_select.value.split('/', 1)
+            
+        res = await sdk.llm.search(
+            query, 
+            top_k=top_k, 
+            workspace_id=vector_workspace_id.value or None,
+            document_id=search_doc_id.value or None,
+            provider=provider, 
+            model=model
+        )
+        vector_res_area.set_visibility(True)
+        if res:
+            out = ""
+            for i, r in enumerate(res):
+                out += f"**Match #{i+1}** (Score: {r['score']:.3f})\n"
+                out += f"> {r.get('metadata', {}).get('text', r['id'])[:200]}\n\n"
+            vector_res_area.set_content(out)
+        else:
+            vector_res_area.set_content("*No results found*")
+        add_log("Search complete", 'success')
+    except Exception as e:
+        handle_llm_error(e)
+
+def handle_llm_error(e):
+    if isinstance(e, LLMPermissionError):
+        add_log(f"Permission Required: {e.permission}", 'error')
+    elif isinstance(e, LLMProviderError):
+        add_log(f"Provider Error: {e.message} (Code: {e.code})", 'error')
+    else:
+        add_log(f"Error: {e}", 'error')
+
+async def delete_all_vectors():
+    ws_id = vector_workspace_id.value or "all"
+    if await ui.run_javascript(f'confirm("Delete all vectors in \'{ws_id}\'?")'):
+        try:
+            add_log(f"Deleting vectors in {ws_id}...")
+            res = await sdk.llm.vectors.delete(
+                delete_all=True, 
+                workspace_id=vector_workspace_id.value or None
+            )
+            add_log("All vectors deleted", 'success')
+            vector_res_area.set_content("All vectors deleted.")
+        except Exception as e:
+            add_log(f"Delete failed: {e}", 'error')
+
+# --- UI Layout ---
 
 @ui.page('/')
 async def main_page():
-    global log_area, activities_table, agent_select, ws_select, thread_select, prompt_input, raw_data_input, auto_run_switch, trigger_btn, task_uuid_input, task_status_label
+    global log_area, activities_table, agent_select, ws_select, thread_select, prompt_input, raw_data_input, auto_run_switch, task_uuid_input, task_status_label
+    global chat_messages, chat_model_select, chat_stream_switch, chat_resp_area, embed_input, embed_res_area, providers_label
+    global embed_store_texts, embed_store_doc_id, search_query, search_top_k, vector_res_area, vector_panels, embed_model_select
 
     ui.colors(primary='#3b82f6', secondary='#10b981', accent='#f59e0b')
     
     with ui.header().classes('items-center justify-between bg-white text-black border-b px-8 py-4'):
         with ui.row().classes('items-center gap-4'):
-            ui.icon('bolt', color='primary').classes('text-3xl')
-            ui.label('RealtimeX SDK Demo').classes('text-2xl font-bold')
+            ui.icon('bolt', color='primary').classes('text-3xl font-bold')
+            with ui.column().classes('gap-0'):
+                ui.label('RealtimeX SDK Demo').classes('text-2xl font-bold')
+                ui.label('v1.1.0 - All SDK Features').classes('text-xs text-gray-400')
         
         with ui.row().classes('items-center gap-6'):
-            with ui.column().classes('gap-0'):
-                ui.label(f"App: {os.environ.get('RTX_APP_NAME', 'Local App Demo')}").classes('text-sm font-medium')
-                ui.label(f"ID: {os.environ.get('RTX_APP_ID', 'Not set')}").classes('text-xs text-gray-500')
+            with ui.column().classes('gap-0 text-right'):
+                ui.label(f"App: {os.environ.get('RTX_APP_NAME', 'Python Demo')}").classes('text-sm font-medium')
+                ui.label(f"ID: {os.environ.get('RTX_APP_ID', 'Not set')[:8]}...").classes('text-xs text-gray-500')
             ui.button(icon='refresh', on_click=lambda: asyncio.gather(refresh_activities(), fetch_agents(), fetch_workspaces())).props('flat')
 
+    with ui.tabs().classes('w-full border-b px-8') as tabs:
+        t1 = ui.tab('📋 Activities')
+        t2 = ui.tab('🔗 API & Webhook')
+        t3 = ui.tab('🤖 LLM & Vectors')
+
     with ui.row().classes('w-full no-wrap items-start gap-8 p-8'):
-        
-        # --- LEFT: Activities List ---
-        with ui.column().classes('flex-1 gap-6 min-w-[600px]'):
-            with ui.card().classes('w-full'):
-                ui.label('1. Select an Activity').classes('text-lg font-bold mb-2 text-primary')
-                
-                columns = [
-                    {'name': 'id', 'label': 'ID', 'field': 'id', 'align': 'left'},
-                    {'name': 'type', 'label': 'Type', 'field': 'display_type'},
-                    {'name': 'status', 'label': 'Status', 'field': 'status'},
-                    {'name': 'created_at', 'label': 'Created', 'field': 'display_time'},
-                ]
-                
-                activities_table = ui.table(columns=columns, rows=[], row_key='id', selection='single').classes('w-full')
-                activities_table.on('selection', on_activity_selected)
-                
-                with ui.row().classes('w-full justify-end gap-2 mt-2'):
-                    ui.button('Refresh', icon='refresh', on_click=refresh_activities).props('outline size=sm')
-                    ui.button('Mark Completed', icon='check', on_click=lambda: update_activity(activities_table.selected[0]['id'], 'completed') if activities_table.selected else None).props('color=blue size=sm')
-                    ui.button('Delete', icon='delete', on_click=lambda: delete_activity(activities_table.selected[0]['id']) if activities_table.selected else None).props('color=red size=sm')
-
-            with ui.card().classes('w-full'):
-                ui.label('Quick Insert Activity').classes('text-sm font-bold mb-2')
-                with ui.row().classes('w-full items-end gap-2'):
-                    new_data = ui.input(label='JSON Data', value='{"type": "task", "message": "hello"}').classes('flex-1')
-                    ui.button('Insert', on_click=lambda: create_activity(new_data.value))
-
-        # --- RIGHT: Metadata & Triggering ---
-        with ui.column().classes('w-[400px] gap-6'):
+        with ui.column().classes('flex-1 min-w-0'):
             
-            # --- AGENTS SECTION ---
-            with ui.card().classes('w-full'):
-                with ui.row().classes('w-full justify-between items-center'):
-                    ui.label('2. AI Agents').classes('text-lg font-bold text-primary')
-                    ui.button(icon='sync', on_click=fetch_agents).props('flat round size=sm')
-                agent_select = ui.select(label='Select Agent', options={}).classes('w-full')
-
-            # --- WORKSPACES & THREADS SECTION ---
-            with ui.card().classes('w-full'):
-                with ui.row().classes('w-full justify-between items-center'):
-                    ui.label('3. Context (WS & Threads)').classes('text-lg font-bold text-primary')
-                    ui.button(icon='sync', on_click=fetch_workspaces).props('flat round size=sm')
+            with ui.tab_panels(tabs, value=t1).classes('w-full bg-transparent'):
                 
-                ws_select = ui.select(label='Select Workspace', options={}, on_change=lambda e: fetch_threads(e.value)).classes('w-full')
-                thread_select = ui.select(label='Select Thread (Optional)', options={}).classes('w-full')
+                # --- TAB 1: ACTIVITIES ---
+                with ui.tab_panel(t1).classes('p-0 gap-6'):
+                    with ui.card().classes('w-full p-6'):
+                        ui.label('📋 Activities CRUD').classes('text-lg font-bold text-primary mb-4')
+                        with ui.row().classes('w-full gap-2 mb-4'):
+                            new_data = ui.input(label='JSON Data', value='{"type": "task", "message": "hello"}').classes('flex-1')
+                            ui.button('Insert', on_click=lambda: create_activity(new_data.value)).props('color=green')
+                        
+                        columns = [
+                            {'name': 'id', 'label': 'ID', 'field': 'id', 'align': 'left'},
+                            {'name': 'type', 'label': 'Type', 'field': 'display_type'},
+                            {'name': 'status', 'label': 'Status', 'field': 'status'},
+                            {'name': 'created_at', 'label': 'Created', 'field': 'display_time'},
+                        ]
+                        activities_table = ui.table(columns=columns, rows=[], row_key='id', selection='single').classes('w-full')
+                        
+                        with ui.row().classes('w-full justify-end gap-2 mt-4'):
+                            ui.button('Refresh', icon='refresh', on_click=refresh_activities).props('outline size=sm')
+                            ui.button('Complete', icon='check', on_click=lambda: update_activity(activities_table.selected[0]['id'], 'completed') if activities_table.selected else ui.notify('Select row first')).props('color=blue size=sm')
+                            ui.button('Delete', icon='delete', on_click=lambda: delete_activity(activities_table.selected[0]['id']) if activities_table.selected else ui.notify('Select row first')).props('color=red size=sm')
 
-            # --- TRIGGER SECTION ---
-            with ui.card().classes('w-full border-2 border-primary'):
-                ui.label('4. Trigger Configuration').classes('text-lg font-bold text-primary')
-                
-                # Auto/Manual Toggle
-                with ui.row().classes('w-full items-center gap-4 mb-4 p-3 bg-gray-100 rounded'):
-                    auto_run_switch = ui.switch('Auto-run Mode', value=True)
-                    with ui.column().classes('gap-0'):
-                        ui.label().bind_text_from(auto_run_switch, 'value', 
-                            lambda v: 'Agent will be triggered immediately' if v else 'Creates calendar event for later review'
-                        ).classes('text-xs text-gray-600')
-                
-                raw_data_input = ui.textarea(label='Raw Data (JSON)', value='{"type": "task", "message": "hello"}').classes('w-full font-mono')
-                prompt_input = ui.textarea(label='Instructions for Agent', value='Please look into this activity.').classes('w-full')
-                
-                with ui.row().classes('w-full items-center gap-2 mt-4'):
-                    trigger_btn = ui.button('TRIGGER AGENT NOW', icon='bolt', on_click=trigger_agent).classes('flex-1 py-4').props('size=lg')
-                    # Update button text based on mode
-                    auto_run_switch.on_value_change(lambda e: trigger_btn.set_text('TRIGGER AGENT NOW' if e.value else 'CREATE CALENDAR EVENT'))
+                # --- TAB 2: API & WEBHOOK ---
+                with ui.tab_panel(t2).classes('p-0 space-y-6'):
+                    with ui.row().classes('w-full gap-6'):
+                        with ui.card().classes('flex-1'):
+                            ui.label('🤖 Agents').classes('text-md font-bold text-primary mb-2')
+                            ui.button('Fetch Agents', on_click=fetch_agents).classes('w-full')
+                            agent_select = ui.select(label='Select Agent', options={}).classes('w-full')
+                        with ui.card().classes('flex-1'):
+                            ui.label('📁 Workspaces').classes('text-md font-bold text-primary mb-2')
+                            ui.button('Fetch Workspaces', on_click=fetch_workspaces).classes('w-full')
+                            ws_select = ui.select(label='Workspace', options={}, on_change=lambda e: fetch_threads(e.value)).classes('w-full')
+                            thread_select = ui.select(label='Thread', options={'create_new': '➕ Create New Thread'}, value='create_new').classes('w-full')
 
-            # --- LOGS ---
-            with ui.card().classes('w-full bg-slate-900 text-slate-100 font-mono'):
-                ui.label('SDK Output').classes('text-xs font-bold text-slate-400')
-                log_area = ui.markdown('').classes('text-[10px] overflow-auto h-48 w-full')
-            
-            # --- TASK STATUS QUERY ---
-            with ui.card().classes('w-full'):
-                ui.label('5. Task Status Query').classes('text-lg font-bold text-purple-600')
-                with ui.row().classes('w-full items-center gap-2'):
-                    task_uuid_input = ui.input(label='Task UUID', placeholder='Enter task UUID...').classes('flex-1 font-mono')
-                    ui.button('Fetch', icon='search', on_click=fetch_task_status).props('color=purple')
-                task_status_label = ui.label('').classes('text-sm text-gray-600 mt-2')
+                    with ui.card().classes('w-full border-2 border-primary'):
+                        ui.label('⚡ Trigger Agent').classes('text-md font-bold text-primary mb-4')
+                        with ui.row().classes('w-full gap-4'):
+                            raw_data_input = ui.textarea(label='Raw Data (JSON)', value='{"type": "task", "message": "hello"}').classes('flex-1 font-mono')
+                            prompt_input = ui.textarea(label='Prompt', value='Please process this activity.').classes('flex-1')
+                        with ui.row().classes('w-full items-center gap-4 mt-4'):
+                            auto_run_switch = ui.switch('Auto-run (immediate)', value=True)
+                            ui.button('TRIGGER AGENT', icon='bolt', on_click=trigger_agent).classes('flex-1 py-4').props('size=lg')
 
-    # Initial load (manifest permission registration is handled automatically by SDK)
-    await asyncio.gather(refresh_activities(), fetch_agents(), fetch_workspaces())
+                    with ui.card().classes('w-full'):
+                        ui.label('📊 Task Status').classes('text-md font-bold text-purple-600 mb-2')
+                        with ui.row().classes('w-full gap-2'):
+                            task_uuid_input = ui.input(label='Task UUID').classes('flex-1 font-mono')
+                            ui.button('Fetch', on_click=fetch_task_status).props('color=purple')
+                        task_status_label = ui.label('').classes('text-sm text-gray-500 mt-2')
+
+                # --- TAB 3: LLM & VECTORS ---
+                with ui.tab_panel(t3).classes('p-0 space-y-6'):
+                    with ui.row().classes('w-full gap-6'):
+                        # Config
+                        with ui.card().classes('flex-1'):
+                            ui.label('🔌 Model Configuration').classes('text-md font-bold text-green-600 mb-2')
+                            ui.button('Fetch Available Models', on_click=fetch_providers).props('color=green').classes('w-full')
+                            chat_model_select = ui.select(label='Chat Model', options={}).classes('w-full')
+                            embed_model_select = ui.select(label='Embedding Model', options={}).classes('w-full')
+                            providers_label = ui.label('Click to load models...').classes('text-xs text-gray-500 mt-1')
+
+                        # Chat
+                        with ui.card().classes('flex-1'):
+                            ui.label('💬 Chat Test').classes('text-md font-bold text-blue-600 mb-2')
+                            with ui.row().classes('w-full justify-between items-center bg-gray-50 p-2 rounded'):
+                                chat_stream_switch = ui.switch('Streaming', value=True)
+                                ui.button('SEND', on_click=send_chat).props('color=blue')
+                            chat_messages = ui.textarea(label='Messages JSON', value='[{"role":"user","content":"Hello!"}]').classes('w-full font-mono mt-2')
+                            chat_resp_area = ui.markdown('').classes('w-full p-4 bg-gray-900 text-green-400 rounded text-sm hidden min-h-[50px] italic')
+
+                    # Vectors Section
+                    with ui.card().classes('w-full'):
+                    with ui.row().classes('w-full items-end gap-4 mb-4'):
+                        vector_workspace_id = ui.select(
+                            label='Workspace ID (Optional)', 
+                            options=['default'], 
+                            with_input=True,
+                            new_value_mode='add-unique'
+                        ).classes('flex-1')
+                        ui.button('Clear All', on_click=delete_all_vectors).props('flat color=red size=sm')
+                        
+                        with ui.tabs().classes('w-full') as vtabs:
+                            vt2 = ui.tab('1. Ingest Data')
+                            vt1 = ui.tab('2. Search Test')
+                            vt3 = ui.tab('3. Raw Embedding')
+                        
+                        vector_panels = ui.tab_panels(vtabs, value=vt2).classes('w-full mt-4')
+                        
+                        with vector_panels:
+                            with ui.tab_panel(vt2).classes('p-0 space-y-4'):
+                                with ui.card().classes('bg-orange-50 border-orange-100 p-3 w-full'):
+                                    ui.label('Step 1: Ingest Data. Prepare your knowledge base. The SDK will automatically chunk and store your text as vectors.').classes('text-xs text-orange-800')
+                                with ui.row().classes('w-full gap-4'):
+                                    embed_store_doc_id = ui.input(label='Namespace/Doc ID').classes('flex-1')
+                                    ui.button('Start Ingestion', on_click=embed_and_store).classes('px-8').props('color=orange')
+                                embed_store_texts = ui.textarea(label='Texts (one per line)', value='RealtimeX is a local AI platform.\nIt uses Local Apps for extensibility.\nSDK v1.1.0 supports vector RAG.').classes('w-full')
+
+                            with ui.tab_panel(vt1).classes('p-0 space-y-4'):
+                                with ui.card().classes('bg-blue-50 border-blue-100 p-3 w-full'):
+                                    ui.label('Step 2: Search Test. Query your data. The SDK converts your question to a vector and finds relevant chunks.').classes('text-xs text-blue-800')
+                                with ui.row().classes('w-full gap-2 items-end'):
+                                    search_query = ui.input(label='Search Question', value='What is RealtimeX?').classes('flex-1')
+                                    search_doc_id = ui.input(label='Doc ID Filter').classes('w-32')
+                                    search_top_k = ui.number(label='Top K', value=3).classes('w-16')
+                                    ui.button('SEARCH', on_click=semantic_search).props('color=blue')
+                            
+                            with ui.tab_panel(vt3).classes('p-0'):
+                                with ui.card().classes('bg-indigo-50 border-indigo-100 p-3 w-full mb-4'):
+                                    ui.label('Step 3: Raw Embedding. See the raw high-dimensional vector data for debugging.').classes('text-xs text-indigo-800')
+                                with ui.row().classes('w-full gap-2 items-end'):
+                                    embed_input = ui.input(label='Text to vectorstrip', value='Hello world').classes('flex-1')
+                                    ui.button('EMBED', on_click=generate_embedding).props('color=indigo px-8')
+                                embed_res_area = ui.markdown('').classes('w-full p-3 bg-gray-900 text-indigo-300 rounded text-xs hidden mt-4')
+
+                        vector_res_area = ui.markdown('').classes('w-full p-4 bg-gray-50 border rounded text-sm hidden mt-4 max-h-64 overflow-auto')
+
+        # --- LOGS PANEL ---
+        with ui.column().classes('w-80'):
+            with ui.card().classes('w-full bg-slate-900 text-slate-100 sticky top-4'):
+                with ui.row().classes('w-full justify-between items-center mb-2'):
+                    ui.label('SDK Output').classes('text-xs font-bold text-slate-400')
+                    ui.button(icon='delete_sweep', on_click=lambda: (state.logs.clear(), log_area.set_content(""))).props('flat round size=xs color=slate-400')
+                log_area = ui.html('').classes('text-[10px] font-mono leading-tight whitespace-pre-wrap overflow-auto h-[70vh]')
+
+    # Initial load
+    await asyncio.gather(
+        refresh_activities(), 
+        fetch_agents(), 
+        fetch_workspaces(),
+        fetch_vector_workspaces()
+    )
 
 if __name__ in {"__main__", "__mp_main__"}:
-    # Get available port (auto-detects or finds free port if conflict)
     port = sdk.port.get_port()
-    ui.run(title='RealtimeX SDK Demo', port=port)
-
+    ui.run(title='RealtimeX SDK Demo', port=port, show=False)

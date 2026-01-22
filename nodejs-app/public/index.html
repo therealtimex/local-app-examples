@@ -11,6 +11,29 @@
             font-size: 11px;
             line-height: 1.4;
         }
+
+        .tab-btn {
+            transition: all 0.2s;
+        }
+
+        .tab-btn.active {
+            border-bottom: 3px solid #3b82f6;
+            color: #3b82f6;
+            font-weight: 600;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .stream-output {
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
     </style>
 </head>
 
@@ -18,202 +41,384 @@
     <!-- Header -->
     <header class="bg-white border-b shadow-sm px-8 py-4 flex items-center justify-between">
         <div class="flex items-center gap-4">
-            <div class="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
+            <div
+                class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
                 <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
             </div>
-            <h1 class="text-2xl font-bold text-gray-800">RealtimeX SDK Demo</h1>
+            <div>
+                <h1 class="text-2xl font-bold text-gray-800">RealtimeX SDK Demo</h1>
+                <p class="text-xs text-gray-500">v1.1.0 - All SDK Features</p>
+            </div>
         </div>
         <div class="flex items-center gap-6">
             <div class="text-right">
                 <div id="app-name" class="text-sm font-medium text-gray-700">Loading...</div>
                 <div id="app-id" class="text-xs text-gray-500">ID: Loading...</div>
             </div>
-            <button onclick="refreshAll()" class="p-2 hover:bg-gray-100 rounded-lg transition">
-                <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-            </button>
         </div>
     </header>
 
+    <!-- Tabs Navigation -->
+    <nav class="bg-white border-b px-8">
+        <div class="flex gap-8">
+            <button onclick="switchTab('activities')" class="tab-btn active px-4 py-4 text-sm" data-tab="activities">
+                📋 Activities
+            </button>
+            <button onclick="switchTab('api')" class="tab-btn px-4 py-4 text-sm" data-tab="api">
+                🔗 API & Webhook
+            </button>
+            <button onclick="switchTab('llm')" class="tab-btn px-4 py-4 text-sm" data-tab="llm">
+                🤖 LLM & Vectors
+            </button>
+        </div>
+    </nav>
+
     <!-- Main Content -->
-    <main class="p-8 flex gap-8">
-        <!-- LEFT: Activities -->
-        <div class="flex-1 space-y-6 min-w-[600px]">
-            <!-- Activities Table -->
-            <div class="bg-white rounded-xl shadow-sm border p-6">
-                <h2 class="text-lg font-bold text-blue-600 mb-4">1. Select an Activity</h2>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead class="bg-gray-50">
-                            <tr>
-                                <th class="px-4 py-3 text-left font-medium text-gray-600">ID</th>
-                                <th class="px-4 py-3 text-left font-medium text-gray-600">Type</th>
-                                <th class="px-4 py-3 text-left font-medium text-gray-600">Status</th>
-                                <th class="px-4 py-3 text-left font-medium text-gray-600">Created</th>
-                            </tr>
-                        </thead>
-                        <tbody id="activities-table" class="divide-y">
-                            <tr>
-                                <td colspan="4" class="px-4 py-8 text-center text-gray-400">Loading...</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-                <div class="flex justify-end gap-2 mt-4">
-                    <button onclick="refreshActivities()"
-                        class="px-4 py-2 border rounded-lg hover:bg-gray-50 text-sm">Refresh</button>
-                    <button onclick="markCompleted()"
-                        class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm">Mark
-                        Completed</button>
-                    <button onclick="deleteActivity()"
-                        class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 text-sm">Delete</button>
+    <main class="p-8 flex gap-6">
+        <!-- LEFT: Tab Content -->
+        <div class="flex-1 min-w-0">
+
+            <!-- ==================== ACTIVITIES TAB ==================== -->
+            <div id="tab-activities" class="tab-content active space-y-6">
+                <div class="bg-white rounded-xl shadow-sm border p-6">
+                    <h2 class="text-lg font-bold text-blue-600 mb-4">📋 Activities CRUD</h2>
+
+                    <!-- Quick Insert -->
+                    <div class="flex gap-2 mb-4">
+                        <input id="new-activity-data" type="text" value='{"type": "task", "message": "hello"}'
+                            class="flex-1 px-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+                        <button onclick="insertActivity()"
+                            class="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm">Insert</button>
+                    </div>
+
+                    <!-- Table -->
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-3 text-left font-medium text-gray-600">ID</th>
+                                    <th class="px-4 py-3 text-left font-medium text-gray-600">Type</th>
+                                    <th class="px-4 py-3 text-left font-medium text-gray-600">Status</th>
+                                    <th class="px-4 py-3 text-left font-medium text-gray-600">Created</th>
+                                    <th class="px-4 py-3 text-left font-medium text-gray-600">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="activities-table" class="divide-y">
+                                <tr>
+                                    <td colspan="5" class="px-4 py-8 text-center text-gray-400">Loading...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="flex justify-end gap-2 mt-4">
+                        <button onclick="refreshActivities()"
+                            class="px-4 py-2 border rounded-lg hover:bg-gray-50 text-sm">Refresh</button>
+                    </div>
                 </div>
             </div>
 
-            <!-- Quick Insert -->
-            <div class="bg-white rounded-xl shadow-sm border p-6">
-                <h3 class="text-sm font-bold text-gray-700 mb-3">Quick Insert Activity</h3>
-                <div class="flex gap-2">
-                    <input id="new-activity-data" type="text" value='{"type": "task", "message": "hello"}'
-                        class="flex-1 px-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                    <button onclick="insertActivity()"
-                        class="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm">Insert</button>
+            <!-- ==================== API & WEBHOOK TAB ==================== -->
+            <div id="tab-api" class="tab-content space-y-6">
+                <!-- Agents & Workspaces -->
+                <div class="grid grid-cols-2 gap-6">
+                    <div class="bg-white rounded-xl shadow-sm border p-6">
+                        <h3 class="text-md font-bold text-blue-600 mb-4">🤖 Agents</h3>
+                        <button onclick="fetchAgents()"
+                            class="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm mb-3">Fetch
+                            Agents</button>
+                        <select id="agent-select" class="w-full px-4 py-2 border rounded-lg text-sm">
+                            <option value="">Select an agent...</option>
+                        </select>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border p-6">
+                        <h3 class="text-md font-bold text-blue-600 mb-4">📁 Workspaces</h3>
+                        <button onclick="fetchWorkspaces()"
+                            class="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm mb-3">Fetch
+                            Workspaces</button>
+                        <select id="workspace-select" onchange="fetchThreads()"
+                            class="w-full px-4 py-2 border rounded-lg text-sm mb-2">
+                            <option value="">Select a workspace...</option>
+                        </select>
+                        <select id="thread-select" class="w-full px-4 py-2 border rounded-lg text-sm">
+                            <option value="create_new">➕ Create New Thread</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Trigger Agent -->
+                <div class="bg-white rounded-xl shadow-sm border-2 border-blue-500 p-6">
+                    <h3 class="text-md font-bold text-blue-600 mb-4">⚡ Trigger Agent</h3>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Raw Data (JSON)</label>
+                            <textarea id="raw-data-input" rows="3"
+                                class="w-full px-4 py-2 border rounded-lg text-sm font-mono">{"type": "task", "message": "hello"}</textarea>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Prompt</label>
+                            <textarea id="prompt-input" rows="3"
+                                class="w-full px-4 py-2 border rounded-lg text-sm">Please process this activity.</textarea>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-4 mt-4">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" id="auto-run-toggle" checked class="w-4 h-4">
+                            <span class="text-sm">Auto-run (immediate)</span>
+                        </label>
+                        <button onclick="triggerAgent()"
+                            class="flex-1 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-bold">
+                            ⚡ TRIGGER AGENT
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Task Status -->
+                <div class="bg-white rounded-xl shadow-sm border p-6">
+                    <h3 class="text-md font-bold text-purple-600 mb-4">📊 Task Status</h3>
+                    <div class="flex gap-2">
+                        <input type="text" id="task-uuid-input" placeholder="Enter task UUID..."
+                            class="flex-1 px-4 py-2 border rounded-lg text-sm font-mono">
+                        <button onclick="fetchTaskStatus()"
+                            class="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600">Fetch</button>
+                    </div>
+                    <div id="task-status-result" class="hidden mt-3 p-3 bg-gray-50 rounded-lg text-sm">
+                        <div class="grid grid-cols-2 gap-2">
+                            <span class="text-gray-500">Status:</span><span id="task-status-value"
+                                class="font-medium">-</span>
+                            <span class="text-gray-500">Source:</span><span id="task-source-value"
+                                class="font-medium">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ==================== LLM & VECTORS TAB ==================== -->
+            <div id="tab-llm" class="tab-content space-y-6">
+                <!-- Selectors & Configuration -->
+                <div class="grid grid-cols-2 gap-6">
+                    <div class="bg-white rounded-xl shadow-sm border p-6">
+                        <h3 class="text-md font-bold text-green-600 mb-4">🔌 Model Configuration</h3>
+                        <button onclick="fetchProviders()"
+                            class="w-full px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm mb-4">Fetch
+                            Available Models</button>
+
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Chat
+                                    Model</label>
+                                <select id="chat-model-select"
+                                    class="w-full px-4 py-2 border rounded-lg text-sm bg-gray-50">
+                                    <option value="">Auto-select (Default)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Embedding
+                                    Model</label>
+                                <select id="embed-model-select"
+                                    class="w-full px-4 py-2 border rounded-lg text-sm bg-gray-50">
+                                    <option value="">Auto-select (Default)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Chat Section -->
+                    <div class="bg-white rounded-xl shadow-sm border p-6">
+                        <h3 class="text-md font-bold text-blue-600 mb-4">� Chat Test</h3>
+                        <div class="space-y-3">
+                            <div class="flex items-center justify-between bg-gray-50 p-2 rounded-lg">
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" id="chat-stream" class="w-4 h-4" checked>
+                                    <span class="text-xs font-medium">Use Streaming (SSE)</span>
+                                </label>
+                                <button onclick="sendChat()"
+                                    class="px-6 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm font-bold">SEND</button>
+                            </div>
+                            <textarea id="chat-messages" rows="3"
+                                class="w-full px-4 py-2 border rounded-lg text-sm font-mono"
+                                placeholder='[{"role":"user","content":"Hello!"}]'>[{"role":"user","content":"Hello! Who are you?"}]</textarea>
+                            <div id="chat-response"
+                                class="p-3 bg-gray-900 text-green-400 rounded-lg text-sm stream-output max-h-48 overflow-auto border-l-4 border-blue-500 hidden italic">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- RAG & Vectors Section -->
+                <div class="bg-white rounded-xl shadow-sm border p-6">
+                    <h3 class="text-md font-bold text-orange-600 mb-2">📦 Vector Store & RAG (Retrieval-Augmented
+                        Generation)</h3>
+                    <p class="text-[10px] text-gray-500 mb-6 uppercase tracking-wider font-semibold">Follow these steps
+                        to test semantic search capabilities</p>
+
+                    <div class="flex items-center gap-4 mb-6">
+                        <div class="flex-1">
+                            <label class="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Workspace ID
+                                (Optional)</label>
+                            <input id="vector-workspace-id" type="text" placeholder="Isolated namespace"
+                                list="workspace-list"
+                                class="w-full px-4 py-2 border rounded-lg text-sm bg-gray-50 focus:bg-white transition-colors shadow-inner">
+                            <datalist id="workspace-list"></datalist>
+                        </div>
+                        <div class="pt-4">
+                            <button onclick="deleteAllVectors()"
+                                class="px-3 py-2 text-xs text-red-500 hover:bg-red-50 rounded border border-red-200">Clear
+                                Vectors</button>
+                        </div>
+                    </div>
+
+                    <div class="flex border-b mb-6">
+                        <button onclick="showVectorPanel('embed-store')"
+                            class="v-tab-btn active px-4 py-2 text-sm border-b-2 border-orange-500 text-orange-600 font-bold"
+                            data-vtab="embed-store">1. Ingest Data</button>
+                        <button onclick="showVectorPanel('search')" class="v-tab-btn px-4 py-2 text-sm text-gray-400"
+                            data-vtab="search">2. Search Test</button>
+                        <button onclick="showVectorPanel('embed-only')"
+                            class="v-tab-btn px-4 py-2 text-sm text-gray-400" data-vtab="embed-only">3. Raw
+                            Embedding</button>
+                    </div>
+
+                    <!-- Ingest Data (Step 1) -->
+                    <div id="vector-embed-store" class="vector-panel space-y-4">
+                        <div class="bg-orange-50 p-3 rounded-lg border border-orange-100 mb-4">
+                            <p class="text-xs text-orange-800"><strong>Step 1: Ingest Data.</strong> Prepare your
+                                knowledge base. The SDK will automatically chunk your text and store them as vectors.
+                                This is where your AI "learns" new info.</p>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Namespace / Doc
+                                    ID</label>
+                                <input id="embed-store-doc-id" type="text" placeholder="e.g. documentation-v1"
+                                    class="w-full px-4 py-2 border rounded-lg text-sm">
+                            </div>
+                            <div class="flex items-end">
+                                <button onclick="embedAndStore()"
+                                    class="w-full py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 font-bold uppercase text-xs tracking-wider">Start
+                                    Ingestion</button>
+                            </div>
+                        </div>
+                        <textarea id="embed-store-texts" rows="4"
+                            class="w-full px-4 py-2 border rounded-lg text-sm font-mono"
+                            placeholder="Enter texts (one per line)...">RealtimeX is a local AI platform.
+It uses Local Apps for extensibility.
+SDK v1.1.0 supports vector RAG.</textarea>
+                    </div>
+
+                    <!-- Search Test (Step 2) -->
+                    <div id="vector-search" class="vector-panel space-y-4 hidden">
+                        <div class="bg-blue-50 p-3 rounded-lg border border-blue-100 mb-4">
+                            <p class="text-xs text-blue-800"><strong>Step 2: Search Test.</strong> Query your data. You
+                                can optionally filter by <strong>Document ID</strong> to search within a specific file.
+                            </p>
+                        </div>
+                        <div class="grid grid-cols-12 gap-2 items-end">
+                            <div class="col-span-12 md:col-span-5">
+                                <label class="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Query</label>
+                                <input id="search-query" type="text" placeholder="Enter question..."
+                                    class="w-full px-4 py-2 border rounded-lg text-sm shadow-inner"
+                                    value="What can you do?">
+                            </div>
+                            <div class="col-span-6 md:col-span-4">
+                                <label class="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Filter by
+                                    Document ID (Optional)</label>
+                                <input id="search-doc-id" type="text" placeholder="e.g. doc-1"
+                                    class="w-full px-4 py-2 border rounded-lg text-sm bg-gray-50">
+                            </div>
+                            <div class="col-span-3 md:col-span-1">
+                                <label class="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Top K</label>
+                                <input id="search-topk" type="number" class="w-full px-4 py-2 border rounded-lg text-sm"
+                                    value="3">
+                            </div>
+                            <div class="col-span-3 md:col-span-2">
+                                <button onclick="semanticSearch()"
+                                    class="w-full py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-bold uppercase text-xs">SEARCH</button>
+                            </div>
+                        </div>
+                        <div id="vector-result" class="grid grid-cols-1 gap-3 hidden">
+                            <!-- Results inject here -->
+                        </div>
+                    </div>
+
+                    <!-- Raw Embedding (Step 3) -->
+                    <div id="vector-embed-only" class="vector-panel space-y-4 hidden">
+                        <div class="bg-indigo-50 p-3 rounded-lg border border-indigo-100 mb-4">
+                            <p class="text-xs text-indigo-800"><strong>Step 3: Raw Embedding.</strong> See the raw
+                                high-dimensional vector data for debugging purposes.</p>
+                        </div>
+                        <div class="flex gap-2">
+                            <input id="embed-input" type="text" class="flex-1 px-4 py-2 border rounded-lg text-sm"
+                                value="Sample text for vectorization">
+                            <button onclick="generateEmbedding()"
+                                class="px-6 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 font-bold text-xs">EMBED</button>
+                        </div>
+                        <div id="embed-result"
+                            class="p-3 bg-gray-900 text-indigo-300 border rounded-lg text-xs font-mono hidden overflow-auto max-h-32">
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- RIGHT: Trigger Panel -->
-        <div class="w-[400px] space-y-6">
-            <!-- Agents -->
-            <div class="bg-white rounded-xl shadow-sm border p-6">
-                <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-lg font-bold text-blue-600">2. AI Agents</h2>
-                    <button onclick="fetchAgents()" class="p-1 hover:bg-gray-100 rounded">
-                        <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                    </button>
+        <!-- RIGHT: Logs Panel -->
+        <div class="w-80 flex-shrink-0">
+            <div class="bg-gray-900 rounded-xl shadow-sm p-4 sticky top-4">
+                <div class="flex justify-between items-center mb-2">
+                    <h3 class="text-xs font-bold text-gray-400">SDK Output</h3>
+                    <button onclick="clearLogs()" class="text-xs text-gray-500 hover:text-gray-300">Clear</button>
                 </div>
-                <select id="agent-select"
-                    class="w-full px-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
-                    <option value="">Select an agent...</option>
-                </select>
-            </div>
-
-            <!-- Workspaces & Threads -->
-            <div class="bg-white rounded-xl shadow-sm border p-6">
-                <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-lg font-bold text-blue-600">3. Context</h2>
-                    <button onclick="fetchWorkspaces()" class="p-1 hover:bg-gray-100 rounded">
-                        <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                    </button>
-                </div>
-                <select id="workspace-select" onchange="fetchThreads()"
-                    class="w-full px-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 mb-3">
-                    <option value="">Select a workspace...</option>
-                </select>
-                <select id="thread-select"
-                    class="w-full px-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
-                    <option value="create_new">➕ Create New Thread</option>
-                </select>
-            </div>
-
-            <!-- Trigger -->
-            <div class="bg-white rounded-xl shadow-sm border-2 border-blue-500 p-6">
-                <h2 class="text-lg font-bold text-blue-600 mb-4">4. Trigger Configuration</h2>
-
-                <!-- Auto/Manual Toggle -->
-                <div class="flex items-center gap-3 mb-4 p-3 bg-gray-50 rounded-lg">
-                    <label class="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" id="auto-run-toggle" class="sr-only peer" checked>
-                        <div
-                            class="w-11 h-6 bg-gray-200 peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500">
-                        </div>
-                    </label>
-                    <div>
-                        <span id="mode-label" class="text-sm font-medium text-gray-700">Auto-run Mode</span>
-                        <p id="mode-desc" class="text-xs text-gray-500">Agent will be triggered immediately</p>
-                    </div>
-                </div>
-
-                <label class="block text-sm font-medium text-gray-700 mb-1">Raw Data (JSON)</label>
-                <textarea id="raw-data-input" rows="3" placeholder='{"type": "task", "data": "..."}'
-                    class="w-full px-4 py-2 border rounded-lg text-sm font-mono focus:ring-2 focus:ring-blue-500 mb-3">{"type": "task", "message": "hello"}</textarea>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Instructions for Agent</label>
-                <textarea id="prompt-input" rows="2" placeholder="Instructions for Agent..."
-                    class="w-full px-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 mb-4">Please look into this activity.</textarea>
-                <button onclick="triggerAgent()"
-                    class="w-full py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-bold flex items-center justify-center gap-2">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                    <span id="trigger-btn-text">TRIGGER AGENT NOW</span>
-                </button>
-            </div>
-
-            <!-- Logs -->
-            <div class="bg-gray-900 rounded-xl shadow-sm p-4">
-                <h3 class="text-xs font-bold text-gray-400 mb-2">SDK Output</h3>
-                <div id="logs" class="h-48 overflow-y-auto text-gray-300 font-mono text-xs space-y-1">
+                <div id="logs" class="h-[calc(100vh-200px)] overflow-y-auto text-gray-300 font-mono text-xs space-y-1">
                     <div class="text-gray-500">Initializing...</div>
-                </div>
-            </div>
-
-            <!-- Task Status Query -->
-            <div class="bg-white rounded-xl shadow-sm border p-6">
-                <h2 class="text-lg font-bold text-purple-600 mb-4">5. Task Status Query</h2>
-                <div class="flex gap-2 mb-3">
-                    <input type="text" id="task-uuid-input" placeholder="Enter task UUID..."
-                        class="flex-1 px-4 py-2 border rounded-lg text-sm font-mono focus:ring-2 focus:ring-purple-500">
-                    <button onclick="fetchTaskStatus()"
-                        class="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 font-medium">
-                        Fetch
-                    </button>
-                </div>
-                <div id="task-status-result" class="hidden p-3 bg-gray-50 rounded-lg text-sm">
-                    <div class="grid grid-cols-2 gap-2">
-                        <span class="text-gray-500">Status:</span>
-                        <span id="task-status-value" class="font-medium">-</span>
-                        <span class="text-gray-500">Source:</span>
-                        <span id="task-source-value" class="font-medium">-</span>
-                        <span class="text-gray-500">Created:</span>
-                        <span id="task-created-value" class="font-medium">-</span>
-                    </div>
                 </div>
             </div>
         </div>
     </main>
 
     <script>
-        // State
+        // ==================== STATE ====================
         let selectedActivity = null;
         let activities = [];
-        let agents = [];
-        let workspaces = [];
-        let threads = [];
 
-        // Logging
-        function addLog(msg) {
+        // ==================== TAB SWITCHING ====================
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
+            document.getElementById(`tab-${tabId}`).classList.add('active');
+        }
+
+        function showVectorPanel(panelId) {
+            document.querySelectorAll('.vector-panel').forEach(p => p.classList.add('hidden'));
+            document.querySelectorAll('.v-tab-btn').forEach(b => {
+                b.classList.remove('active', 'border-b-2', 'border-orange-500', 'text-orange-600', 'font-bold');
+                b.classList.add('text-gray-400');
+            });
+
+            document.getElementById(`vector-${panelId}`).classList.remove('hidden');
+            const activeBtn = document.querySelector(`[data-vtab="${panelId}"]`);
+            activeBtn.classList.add('active', 'border-b-2', 'border-orange-500', 'text-orange-600', 'font-bold');
+            activeBtn.classList.remove('text-gray-400');
+        }
+
+        // ==================== LOGGING ====================
+        function addLog(msg, type = 'info') {
             const now = new Date().toLocaleTimeString('en-US', { hour12: false });
             const logs = document.getElementById('logs');
             const entry = document.createElement('div');
-            entry.className = 'log-entry';
+            entry.className = `log-entry ${type === 'error' ? 'text-red-400' : type === 'success' ? 'text-green-400' : ''}`;
             entry.textContent = `[${now}] ${msg}`;
             logs.insertBefore(entry, logs.firstChild);
-            if (logs.children.length > 50) logs.removeChild(logs.lastChild);
+            if (logs.children.length > 100) logs.removeChild(logs.lastChild);
         }
 
-        // API calls
+        function clearLogs() {
+            document.getElementById('logs').innerHTML = '<div class="text-gray-500">Logs cleared</div>';
+        }
+
+        // ==================== API HELPER ====================
         async function api(method, path, body = null) {
             const opts = { method, headers: { 'Content-Type': 'application/json' } };
             if (body) opts.body = JSON.stringify(body);
@@ -221,230 +426,408 @@
             return res.json();
         }
 
-        // Load app info
+        // ==================== APP INFO ====================
         async function loadAppInfo() {
             const data = await api('GET', '/api/info');
             document.getElementById('app-name').textContent = `App: ${data.app_name}`;
-            document.getElementById('app-id').textContent = `ID: ${data.app_id}`;
+            document.getElementById('app-id').textContent = `ID: ${data.app_id?.slice(0, 8)}...`;
         }
 
-        // Activities
+        // ==================== ACTIVITIES ====================
         async function refreshActivities() {
             addLog('Fetching activities...');
             const data = await api('GET', '/api/activities');
             activities = data.activities || [];
             renderActivities();
-            addLog(`Loaded ${activities.length} activities`);
+            addLog(`Loaded ${activities.length} activities`, 'success');
         }
 
         function renderActivities() {
             const tbody = document.getElementById('activities-table');
             if (activities.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-8 text-center text-gray-400">No activities</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-gray-400">No activities</td></tr>';
                 return;
             }
             tbody.innerHTML = activities.map(a => {
                 const type = a.raw_data?.type || 'N/A';
                 const time = a.created_at?.substring(0, 19).replace('T', ' ') || '';
-                const selected = selectedActivity?.id === a.id;
                 return `
-                    <tr onclick="selectActivity('${a.id}')" class="cursor-pointer hover:bg-blue-50 ${selected ? 'bg-blue-100' : ''}">
+                    <tr class="hover:bg-gray-50">
                         <td class="px-4 py-3 font-mono text-xs">${a.id.substring(0, 8)}...</td>
                         <td class="px-4 py-3">${type}</td>
                         <td class="px-4 py-3"><span class="px-2 py-1 rounded text-xs ${a.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-gray-100'}">${a.status || 'pending'}</span></td>
                         <td class="px-4 py-3 text-gray-500">${time}</td>
+                        <td class="px-4 py-3">
+                            <button onclick="markCompleted('${a.id}')" class="text-blue-500 hover:underline text-xs mr-2">Complete</button>
+                            <button onclick="deleteActivity('${a.id}')" class="text-red-500 hover:underline text-xs">Delete</button>
+                        </td>
                     </tr>
                 `;
             }).join('');
-        }
-
-        function selectActivity(id) {
-            selectedActivity = activities.find(a => a.id === id);
-            addLog(`Selected: ${id}`);
-            renderActivities();
-            // Auto-fill raw data input
-            const rawDataInput = document.getElementById('raw-data-input');
-            if (selectedActivity?.raw_data) {
-                rawDataInput.value = JSON.stringify(selectedActivity.raw_data, null, 2);
-            }
         }
 
         async function insertActivity() {
             const input = document.getElementById('new-activity-data');
             try {
                 const rawData = JSON.parse(input.value);
+                addLog('Inserting activity...');
                 const data = await api('POST', '/api/activities', { raw_data: rawData });
                 if (data.success) {
-                    addLog(`Created activity: ${data.activity.id}`);
+                    addLog(`Created: ${data.activity.id}`, 'success');
                     await refreshActivities();
                 } else {
-                    addLog(`Error: ${data.error}`);
+                    addLog(`Error: ${data.error}`, 'error');
                 }
             } catch (e) {
-                addLog(`Invalid JSON: ${e.message}`);
+                addLog(`Invalid JSON: ${e.message}`, 'error');
             }
         }
 
-        async function markCompleted() {
-            if (!selectedActivity) { addLog('Select an activity first'); return; }
-            const data = await api('PATCH', `/api/activities/${selectedActivity.id}`, { status: 'completed' });
+        async function markCompleted(id) {
+            const data = await api('PATCH', `/api/activities/${id}`, { status: 'completed' });
             if (data.success) {
-                addLog(`Marked ${selectedActivity.id} as completed`);
+                addLog(`Marked ${id.slice(0, 8)} completed`, 'success');
                 await refreshActivities();
             }
         }
 
-        async function deleteActivity() {
-            if (!selectedActivity) { addLog('Select an activity first'); return; }
-            const data = await api('DELETE', `/api/activities/${selectedActivity.id}`);
+        async function deleteActivity(id) {
+            const data = await api('DELETE', `/api/activities/${id}`);
             if (data.success) {
-                addLog(`Deleted ${selectedActivity.id}`);
-                selectedActivity = null;
+                addLog(`Deleted ${id.slice(0, 8)}`, 'success');
                 await refreshActivities();
             }
         }
 
-        // Agents
+        // ==================== AGENTS & WORKSPACES ====================
         async function fetchAgents() {
             addLog('Fetching agents...');
             const data = await api('GET', '/api/agents');
-            agents = data.agents || [];
+            const agents = data.agents || [];
             const select = document.getElementById('agent-select');
             select.innerHTML = '<option value="">Select an agent...</option>' +
                 agents.map(a => `<option value="${a.slug}">${a.name}</option>`).join('');
-            addLog(`Loaded ${agents.length} agents`);
+            addLog(`Loaded ${agents.length} agents`, 'success');
         }
 
-        // Workspaces
         async function fetchWorkspaces() {
             addLog('Fetching workspaces...');
             const data = await api('GET', '/api/workspaces');
-            workspaces = data.workspaces || [];
+            const workspaces = data.workspaces || [];
             const select = document.getElementById('workspace-select');
             select.innerHTML = '<option value="">Select a workspace...</option>' +
                 workspaces.map(w => `<option value="${w.slug}">${w.name}</option>`).join('');
-            addLog(`Loaded ${workspaces.length} workspaces`);
+            addLog(`Loaded ${workspaces.length} workspaces`, 'success');
         }
 
-        // Threads
         async function fetchThreads() {
             const wsSlug = document.getElementById('workspace-select').value;
             const select = document.getElementById('thread-select');
             select.innerHTML = '<option value="create_new">➕ Create New Thread</option>';
             if (!wsSlug) return;
-
-            addLog(`Fetching threads for ${wsSlug}...`);
             const data = await api('GET', `/api/workspaces/${wsSlug}/threads`);
-            threads = data.threads || [];
+            const threads = data.threads || [];
             select.innerHTML = '<option value="create_new">➕ Create New Thread</option>' +
                 threads.map(t => `<option value="${t.slug}">${t.name}</option>`).join('');
             addLog(`Loaded ${threads.length} threads`);
         }
 
-        // Trigger
+        // ==================== TRIGGER AGENT ====================
         async function triggerAgent() {
-            const rawDataInput = document.getElementById('raw-data-input');
+            const rawData = JSON.parse(document.getElementById('raw-data-input').value);
             const agent = document.getElementById('agent-select').value;
             const workspace = document.getElementById('workspace-select').value;
             const thread = document.getElementById('thread-select').value;
             const prompt = document.getElementById('prompt-input').value;
             const autoRun = document.getElementById('auto-run-toggle').checked;
 
-            // Auto mode requires agent and workspace
             if (autoRun && (!agent || !workspace)) {
-                addLog('ERROR: Auto mode requires selecting agent and workspace');
+                addLog('ERROR: Auto mode requires agent and workspace', 'error');
                 return;
             }
 
-            let rawData;
-            try {
-                rawData = JSON.parse(rawDataInput.value);
-            } catch (e) {
-                addLog('ERROR: Invalid JSON in raw data field');
-                return;
-            }
-
-            const mode = autoRun ? 'auto' : 'manual';
-            addLog(`Triggering (${mode} mode)...`);
-
-            const payload = {
+            addLog(`Triggering agent (${autoRun ? 'auto' : 'manual'})...`);
+            const data = await api('POST', '/api/webhook/trigger', {
                 raw_data: rawData,
                 auto_run: autoRun,
-                prompt: prompt,
-            };
-
-            // Only include agent info for auto mode
-            if (autoRun) {
-                payload.agent_name = agent;
-                payload.workspace_slug = workspace;
-                payload.thread_slug = thread;
-            }
-
-            const data = await api('POST', '/api/trigger', payload);
+                prompt,
+                agent_name: autoRun ? agent : undefined,
+                workspace_slug: autoRun ? workspace : undefined,
+                thread_slug: autoRun && thread !== 'create_new' ? thread : undefined,
+            });
 
             if (data.success) {
-                addLog(`SUCCESS! Task UUID: ${data.task_uuid}`);
-                addLog(`Mode: ${data.auto_run ? 'Auto-run' : 'Manual'} - ${data.message}`);
+                addLog(`SUCCESS! Task: ${data.task_uuid}`, 'success');
+                document.getElementById('task-uuid-input').value = data.task_uuid;
             } else {
-                addLog(`FAILED: ${data.error}`);
+                addLog(`FAILED: ${data.error}`, 'error');
             }
         }
 
-        // Toggle mode UI
-        document.addEventListener('DOMContentLoaded', () => {
-            const toggle = document.getElementById('auto-run-toggle');
-            const modeLabel = document.getElementById('mode-label');
-            const modeDesc = document.getElementById('mode-desc');
-            const btnText = document.getElementById('trigger-btn-text');
-
-            toggle.addEventListener('change', () => {
-                if (toggle.checked) {
-                    modeLabel.textContent = 'Auto-run Mode';
-                    modeDesc.textContent = 'Agent will be triggered immediately';
-                    btnText.textContent = 'TRIGGER AGENT NOW';
-                } else {
-                    modeLabel.textContent = 'Manual Mode';
-                    modeDesc.textContent = 'Creates calendar event for later review';
-                    btnText.textContent = 'CREATE CALENDAR EVENT';
-                }
-            });
-        });
-
-        // Fetch Task Status
+        // ==================== TASK STATUS ====================
         async function fetchTaskStatus() {
             const uuid = document.getElementById('task-uuid-input').value.trim();
-            if (!uuid) {
-                addLog('ERROR: Enter a task UUID');
+            if (!uuid) { addLog('Enter a task UUID', 'error'); return; }
+            addLog(`Fetching task ${uuid.slice(0, 8)}...`);
+            const data = await api('GET', `/api/tasks/${uuid}`);
+            const resultDiv = document.getElementById('task-status-result');
+            if (data.success && data.task) {
+                document.getElementById('task-status-value').textContent = data.task.status || 'unknown';
+                document.getElementById('task-source-value').textContent = data.task.sourceAppName || '-';
+                resultDiv.classList.remove('hidden');
+                addLog(`Task status: ${data.task.status}`, 'success');
+            } else {
+                resultDiv.classList.add('hidden');
+                addLog(`Task not found`, 'error');
+            }
+        }
+
+        // ==================== LLM: PROVIDERS ====================
+        async function fetchProviders() {
+            addLog('Fetching LLM providers...');
+            const data = await api('GET', '/api/llm/providers');
+            const chatSelect = document.getElementById('chat-model-select');
+            const embedSelect = document.getElementById('embed-model-select');
+
+            if (data.success) {
+                // LLM Models
+                let chatHtml = '<option value="">Auto-select (Default)</option>';
+                data.llm.forEach(p => {
+                    chatHtml += `<optgroup label="${p.provider}">`;
+                    p.models.forEach(m => {
+                        chatHtml += `<option value="${p.provider}/${m.id}">${m.id}</option>`;
+                    });
+                    chatHtml += '</optgroup>';
+                });
+                chatSelect.innerHTML = chatHtml;
+
+                // Embedding Models
+                let embedHtml = '<option value="">Auto-select (Default)</option>';
+                data.embedding.forEach(p => {
+                    embedHtml += `<optgroup label="${p.provider}">`;
+                    p.models.forEach(m => {
+                        embedHtml += `<option value="${p.provider}/${m.id}">${m.id}</option>`;
+                    });
+                    embedHtml += '</optgroup>';
+                });
+                embedSelect.innerHTML = embedHtml;
+
+                addLog(`Loaded models from ${data.llm.length + data.embedding.length} providers`, 'success');
+            } else {
+                addLog(`Error: ${data.error}`, 'error');
+            }
+        }
+
+        // ==================== LLM: CHAT ====================
+        async function sendChat() {
+            const messagesRaw = document.getElementById('chat-messages').value;
+            const modelFull = document.getElementById('chat-model-select').value;
+            const stream = document.getElementById('chat-stream').checked;
+            const responseDiv = document.getElementById('chat-response');
+
+            let messages;
+            try {
+                messages = JSON.parse(messagesRaw);
+            } catch (e) {
+                addLog('Invalid messages JSON', 'error');
                 return;
             }
 
-            addLog(`Fetching task ${uuid}...`);
-            const data = await api('GET', `/api/tasks/${uuid}`);
+            // Parse provider/model
+            let provider, model;
+            if (modelFull) [provider, model] = modelFull.split('/');
 
-            const resultDiv = document.getElementById('task-status-result');
-            if (data.success && data.task) {
-                const task = data.task;
-                document.getElementById('task-status-value').textContent = task.status || 'unknown';
-                document.getElementById('task-source-value').textContent = task.sourceAppName || task.sourceApp || '-';
-                document.getElementById('task-created-value').textContent = task.createdAt?.slice(0, 19).replace('T', ' ') || '-';
-                resultDiv.classList.remove('hidden');
-                addLog(`Task ${uuid}: ${task.status}`);
+            responseDiv.classList.remove('hidden');
+            responseDiv.innerHTML = '<span class="animate-pulse">Thinking...</span>';
+
+            if (stream) {
+                addLog('Starting SSE stream...');
+                responseDiv.textContent = '';
+                try {
+                    const res = await fetch('/api/llm/chat/stream', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ messages, model, provider })
+                    });
+
+                    if (!res.ok) {
+                        const err = await res.json();
+                        throw new Error(err.error || 'Stream failed');
+                    }
+
+                    const reader = res.body.getReader();
+                    const decoder = new TextDecoder();
+                    let buffer = '';
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        buffer += decoder.decode(value, { stream: true });
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop();
+                        for (const line of lines) {
+                            if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+                                try {
+                                    const chunk = JSON.parse(line.slice(6));
+                                    if (chunk.textResponse) {
+                                        responseDiv.textContent += chunk.textResponse;
+                                        responseDiv.scrollTop = responseDiv.scrollHeight;
+                                    }
+                                } catch { }
+                            }
+                        }
+                    }
+                    addLog('Stream finished', 'success');
+                } catch (e) {
+                    responseDiv.innerHTML = `<span class="text-red-500">Error: ${e.message}</span>`;
+                    addLog(`Stream error: ${e.message}`, 'error');
+                }
             } else {
-                resultDiv.classList.add('hidden');
-                addLog(`ERROR: ${data.error || 'Task not found'}`);
+                addLog('Sending sync chat...');
+                const data = await api('POST', '/api/llm/chat', { messages, model, provider });
+                if (data.success) {
+                    responseDiv.textContent = data.response?.content || 'No content';
+                    addLog(`Chat done: ${data.response?.content?.slice(0, 20)}...`, 'success');
+                } else {
+                    responseDiv.innerHTML = `<span class="text-red-500">Error: ${data.error}</span>`;
+                    addLog(`Chat error: ${data.error}`, 'error');
+                }
             }
         }
 
-        // Refresh all
-        async function refreshAll() {
-            await Promise.all([refreshActivities(), fetchAgents(), fetchWorkspaces()]);
+        // ==================== LLM: EMBEDDINGS ====================
+        async function generateEmbedding() {
+            const input = document.getElementById('embed-input').value;
+            const modelFull = document.getElementById('embed-model-select').value;
+            let provider, model;
+            if (modelFull) [provider, model] = modelFull.split('/');
+
+            addLog('Generating embedding...');
+            const data = await api('POST', '/api/llm/embed', { input, provider, model });
+            const resultDiv = document.getElementById('embed-result');
+            resultDiv.classList.remove('hidden');
+            if (data.success) {
+                const vec = data.embeddings?.[0] || [];
+                resultDiv.textContent = `Dimensions: ${data.dimensions}\n\nVector [0..4]:\n${JSON.stringify(vec.slice(0, 5), null, 2)}`;
+                addLog(`Embedding generated (${data.dimensions}d)`, 'success');
+            } else {
+                resultDiv.textContent = `Error: ${data.error}`;
+                addLog(`Embed error: ${data.error}`, 'error');
+            }
         }
 
-        // Init
+        // ==================== VECTOR STORE ====================
+        async function deleteAllVectors() {
+            const workspaceId = document.getElementById('vector-workspace-id').value || undefined;
+            if (!confirm(`Delete all vectors${workspaceId ? ` in workspace "${workspaceId}"` : ''}?`)) return;
+
+            addLog('Deleting vectors...');
+            const data = await api('POST', '/api/llm/vectors/delete', { deleteAll: true, workspaceId });
+            if (data.success) {
+                addLog('Deleted successfully', 'success');
+            } else {
+                addLog(`Delete error: ${data.error}`, 'error');
+            }
+        }
+
+        async function embedAndStore() {
+            const textsRaw = document.getElementById('embed-store-texts').value;
+            const texts = textsRaw.split('\n').filter(t => t.trim());
+            const documentId = document.getElementById('embed-store-doc-id').value || undefined;
+            const workspaceId = document.getElementById('vector-workspace-id').value || undefined;
+            const modelFull = document.getElementById('embed-model-select').value;
+            let provider, model;
+            if (modelFull) [provider, model] = modelFull.split('/');
+
+            addLog(`Embedding and storing ${texts.length} texts...`);
+            const data = await api('POST', '/api/llm/embed-and-store', {
+                texts,
+                document_id: documentId,
+                workspaceId,
+                provider,
+                model
+            });
+
+            if (data.success) {
+                addLog(`Stored ${texts.length} vectors successfully`, 'success');
+                showVectorPanel('search');
+            } else {
+                addLog(`Store error: ${data.error}`, 'error');
+            }
+        }
+
+        async function semanticSearch() {
+            const query = document.getElementById('search-query').value;
+            const topK = parseInt(document.getElementById('search-topk').value) || 3;
+            const modelFull = document.getElementById('embed-model-select').value;
+            let provider, model;
+            if (modelFull) [provider, model] = modelFull.split('/');
+
+            const documentId = document.getElementById('search-doc-id').value || undefined;
+
+            if (!query) return;
+
+            addLog(`Searching: "${query.slice(0, 30)}..."...`);
+            const workspaceId = document.getElementById('vector-workspace-id').value || undefined;
+            const data = await api('POST', '/api/llm/search', {
+                query,
+                topK,
+                document_id: documentId,
+                workspaceId,
+                provider,
+                model
+            });
+
+            const div = document.getElementById('vector-result');
+            div.classList.remove('hidden');
+
+            if (data.success) {
+                if (data.results && data.results.length > 0) {
+                    div.innerHTML = data.results.map((r, i) => `
+                        <div class="p-3 bg-gray-50 border rounded-lg hover:border-orange-300 transition-colors">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="text-xs font-bold text-orange-600">Match #${i + 1} (Score: ${r.score.toFixed(3)})</span>
+                                <span class="text-[10px] text-gray-400 font-mono">${r.id.slice(0, 8)}...</span>
+                            </div>
+                            <p class="text-sm text-gray-700">${r.metadata?.text || 'No text content'}</p>
+                            ${r.metadata?.documentId ? `<span class="text-[10px] bg-blue-100 text-blue-700 px-1 rounded mt-1 inline-block">Doc: ${r.metadata.documentId}</span>` : ''}
+                        </div>
+                    `).join('');
+                    addLog(`Found ${data.results.length} results`, 'success');
+                } else {
+                    div.innerHTML = '<div class="p-8 text-center text-gray-400 text-sm italic">No results found. Try ingesting data first!</div>';
+                }
+            } else {
+                div.innerHTML = `<div class="p-4 bg-red-50 text-red-500 text-xs">${data.error}</div>`;
+                addLog(`Search error: ${data.error}`, 'error');
+            }
+        }
+
+        // ==================== VECTOR: WORKSPACES ====================
+        async function fetchVectorWorkspaces() {
+            try {
+                const data = await api('GET', '/api/llm/vectors/workspaces');
+                const datalist = document.getElementById('workspace-list');
+                if (data.success && data.workspaces) {
+                    datalist.innerHTML = '';
+                    // Always allow 'default'
+                    const workspaces = data.workspaces.includes('default') ? data.workspaces : ['default', ...data.workspaces];
+                    workspaces.forEach(ws => {
+                        const option = document.createElement('option');
+                        option.value = ws;
+                        datalist.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('Error fetching workspaces:', error);
+            }
+        }
+
+        // ==================== INIT ====================
         window.onload = async () => {
             await loadAppInfo();
-            await refreshAll();
-            addLog('Ready!');
+            await refreshActivities();
+            await fetchVectorWorkspaces();
+            addLog('Ready!', 'success');
         };
     </script>
 </body>
