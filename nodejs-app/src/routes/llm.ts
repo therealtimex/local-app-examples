@@ -15,11 +15,21 @@ export function createLLMRoutes(sdk: RealtimeXSDK): Router {
     // LLM Endpoints
     // ========================
 
-    // GET /providers - List available LLM and embedding providers
-    router.get('/providers', async (req: Request, res: Response) => {
+    // GET /providers/chat - List available LLM providers
+    router.get('/providers/chat', async (req: Request, res: Response) => {
         try {
-            const providers = await sdk.llm.getProviders();
-            res.json(providers);
+            const result = await sdk.llm.chatProviders();
+            res.json(result);
+        } catch (error: any) {
+            handleLLMError(error, res);
+        }
+    });
+
+    // GET /providers/embed - List available embedding providers
+    router.get('/providers/embed', async (req: Request, res: Response) => {
+        try {
+            const result = await sdk.llm.embedProviders();
+            res.json(result);
         } catch (error: any) {
             handleLLMError(error, res);
         }
@@ -28,7 +38,7 @@ export function createLLMRoutes(sdk: RealtimeXSDK): Router {
     // POST /chat - Sync chat completion
     router.post('/chat', async (req: Request, res: Response) => {
         try {
-            const { messages, model, provider, temperature, max_tokens } = req.body;
+            const { messages, model, provider, temperature, max_tokens, response_format } = req.body;
 
             if (!messages || !Array.isArray(messages)) {
                 return res.status(400).json({
@@ -42,6 +52,7 @@ export function createLLMRoutes(sdk: RealtimeXSDK): Router {
                 provider,
                 temperature,
                 max_tokens,
+                response_format,
             });
 
             res.json(response);
@@ -53,7 +64,7 @@ export function createLLMRoutes(sdk: RealtimeXSDK): Router {
     // POST /chat/stream - Streaming chat completion (SSE)
     router.post('/chat/stream', async (req: Request, res: Response) => {
         try {
-            const { messages, model, provider, temperature, max_tokens } = req.body;
+            const { messages, model, provider, temperature, max_tokens, response_format } = req.body;
 
             if (!messages || !Array.isArray(messages)) {
                 return res.status(400).json({
@@ -73,6 +84,7 @@ export function createLLMRoutes(sdk: RealtimeXSDK): Router {
                 provider,
                 temperature,
                 max_tokens,
+                response_format,
             })) {
                 res.write(`data: ${JSON.stringify(chunk)}\n\n`);
             }

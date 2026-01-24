@@ -160,12 +160,18 @@ async def fetch_vector_workspaces():
 async def fetch_providers():
     try:
         add_log("Fetching available models...")
-        res = await sdk.llm.get_providers()
-        state.providers = res
+        # Load from separate endpoints
+        chat_res = await sdk.llm.chat_providers()
+        embed_res = await sdk.llm.embed_providers()
+        
+        state.providers = {
+            'llm': chat_res.get('providers', []),
+            'embedding': embed_res.get('providers', [])
+        }
         
         # Build options for chat
         chat_opts = {}
-        for p in res.get('llm', []):
+        for p in state.providers['llm']:
             provider_name = p.get('provider')
             for m in p.get('models', []):
                 val = f"{provider_name}/{m['id']}"
@@ -175,7 +181,7 @@ async def fetch_providers():
 
         # Build options for embedding
         embed_opts = {}
-        for p in res.get('embedding', []):
+        for p in state.providers['embedding']:
             provider_name = p.get('provider')
             for m in p.get('models', []):
                 val = f"{provider_name}/{m['id']}"
@@ -200,17 +206,34 @@ async def send_chat():
         if chat_model_select.value:
             provider, model = chat_model_select.value.split('/', 1)
 
+        response_format = None
+        if json_mode_switch.value:
+            response_format = {"type": "json_object"}
+
         if chat_stream_switch.value:
             add_log("Starting streaming chat...")
             chat_resp_area.set_content("")
-            async for chunk in sdk.llm.chat_stream(messages, model=model, provider=provider):
-                if chunk.text:
-                    chat_resp_area.content += chunk.text
+            
+            async for chunk in sdk.llm.chat_stream(
+                messages, 
+                model=model, 
+                provider=provider,
+                response_format=response_format
+            ):
+                # The SDK now returns an object with textResponse property
+                text = getattr(chunk, 'textResponse', '') or getattr(chunk, 'text', '')
+                if text:
+                    chat_resp_area.content += text
                     chat_resp_area.update()
             add_log("Stream complete", 'success')
         else:
             add_log("Sending chat request...")
-            res = await sdk.llm.chat(messages, model=model, provider=provider)
+            res = await sdk.llm.chat(
+                messages, 
+                model=model, 
+                provider=provider,
+                response_format=response_format
+            )
             chat_resp_area.set_content(res.get('response', {}).get('content', 'No content'))
             add_log("Chat complete", 'success')
     except Exception as e:
@@ -341,7 +364,7 @@ async def main_page():
     with ui.row().classes('w-full no-wrap items-start gap-8 p-8'):
         with ui.column().classes('flex-1 min-w-0'):
             
-            with ui.tab_panels(tabs, value=t1).classes('w-full bg-transparent'):
+            with ui.tab_panels(tabs, value=t3).classes('w-full bg-transparent'):
                 
                 # --- TAB 1: ACTIVITIES ---
                 with ui.tab_panel(t1).classes('p-0 gap-6'):
@@ -409,20 +432,22 @@ async def main_page():
                             ui.label('💬 Chat Test').classes('text-md font-bold text-blue-600 mb-2')
                             with ui.row().classes('w-full justify-between items-center bg-gray-50 p-2 rounded'):
                                 chat_stream_switch = ui.switch('Streaming', value=True)
-                                ui.button('SEND', on_click=send_chat).props('color=blue')
+                                json_mode_switch = ui.switch('JSON Mode', value=False)
+                                ui.button('SEND', on_click=send_chat).props('color=blue px-6')
                             chat_messages = ui.textarea(label='Messages JSON', value='[{"role":"user","content":"Hello!"}]').classes('w-full font-mono mt-2')
-                            chat_resp_area = ui.markdown('').classes('w-full p-4 bg-gray-900 text-green-400 rounded text-sm hidden min-h-[50px] italic')
+                            chat_resp_area = ui.markdown('').classes('w-full p-4 bg-gray-900 border-l-4 border-blue-500 text-blue-100 rounded text-sm hidden min-h-[100px]')
 
                     # Vectors Section
-                    with ui.card().classes('w-full'):
-                    with ui.row().classes('w-full items-end gap-4 mb-4'):
-                        vector_workspace_id = ui.select(
-                            label='Workspace ID (Optional)', 
-                            options=['default'], 
-                            with_input=True,
-                            new_value_mode='add-unique'
-                        ).classes('flex-1')
-                        ui.button('Clear All', on_click=delete_all_vectors).props('flat color=red size=sm')
+                    with ui.card().classes('w-full mt-6'):
+                        ui.label('🏗️ Vector Store Operations').classes('text-lg font-bold text-slate-700 mb-4')
+                        with ui.row().classes('w-full items-end gap-4 mb-6 pb-6 border-b'):
+                            vector_workspace_id = ui.select(
+                                label='Workspace ID (Optional)', 
+                                options=['default'], 
+                                with_input=True,
+                                new_value_mode='add-unique'
+                            ).classes('flex-1')
+                            ui.button('Reset Namespace', icon='delete_forever', on_click=delete_all_vectors).props('outline color=red size=sm')
                         
                         with ui.tabs().classes('w-full') as vtabs:
                             vt2 = ui.tab('1. Ingest Data')
@@ -433,31 +458,31 @@ async def main_page():
                         
                         with vector_panels:
                             with ui.tab_panel(vt2).classes('p-0 space-y-4'):
-                                with ui.card().classes('bg-orange-50 border-orange-100 p-3 w-full'):
-                                    ui.label('Step 1: Ingest Data. Prepare your knowledge base. The SDK will automatically chunk and store your text as vectors.').classes('text-xs text-orange-800')
-                                with ui.row().classes('w-full gap-4'):
-                                    embed_store_doc_id = ui.input(label='Namespace/Doc ID').classes('flex-1')
-                                    ui.button('Start Ingestion', on_click=embed_and_store).classes('px-8').props('color=orange')
-                                embed_store_texts = ui.textarea(label='Texts (one per line)', value='RealtimeX is a local AI platform.\nIt uses Local Apps for extensibility.\nSDK v1.1.0 supports vector RAG.').classes('w-full')
+                                with ui.card().classes('bg-orange-50 border-orange-100 p-4 w-full'):
+                                    ui.label('Step 1: Ingest Data. The SDK automatically chunks and stores your text as vectors in the selected workspace.').classes('text-xs text-orange-800')
+                                with ui.row().classes('w-full gap-4 items-end'):
+                                    embed_store_doc_id = ui.input(label='Namespace/Doc ID Filter').classes('flex-1')
+                                    ui.button('Start Ingestion', icon='upload', on_click=embed_and_store).classes('px-8').props('color=orange')
+                                embed_store_texts = ui.textarea(label='Texts (one per line)', value='RealtimeX is a local AI platform.\nIt uses Local Apps for extensibility.\nSDK v1.1.0 supports vector RAG.').classes('w-full h-32')
 
                             with ui.tab_panel(vt1).classes('p-0 space-y-4'):
-                                with ui.card().classes('bg-blue-50 border-blue-100 p-3 w-full'):
-                                    ui.label('Step 2: Search Test. Query your data. The SDK converts your question to a vector and finds relevant chunks.').classes('text-xs text-blue-800')
+                                with ui.card().classes('bg-blue-50 border-blue-100 p-4 w-full'):
+                                    ui.label('Step 2: Search Test. Query your data. Finds relevant chunks from the selected workspace.').classes('text-xs text-blue-800')
                                 with ui.row().classes('w-full gap-2 items-end'):
                                     search_query = ui.input(label='Search Question', value='What is RealtimeX?').classes('flex-1')
                                     search_doc_id = ui.input(label='Doc ID Filter').classes('w-32')
                                     search_top_k = ui.number(label='Top K', value=3).classes('w-16')
-                                    ui.button('SEARCH', on_click=semantic_search).props('color=blue')
+                                    ui.button('SEARCH', icon='search', on_click=semantic_search).props('color=blue px-6')
                             
                             with ui.tab_panel(vt3).classes('p-0'):
-                                with ui.card().classes('bg-indigo-50 border-indigo-100 p-3 w-full mb-4'):
-                                    ui.label('Step 3: Raw Embedding. See the raw high-dimensional vector data for debugging.').classes('text-xs text-indigo-800')
+                                with ui.card().classes('bg-indigo-50 border-indigo-100 p-4 w-full mb-4'):
+                                    ui.label('Step 3: Raw Embedding. Generate raw vector embeddings for manual inspection.').classes('text-xs text-indigo-800')
                                 with ui.row().classes('w-full gap-2 items-end'):
                                     embed_input = ui.input(label='Text to vectorstrip', value='Hello world').classes('flex-1')
-                                    ui.button('EMBED', on_click=generate_embedding).props('color=indigo px-8')
-                                embed_res_area = ui.markdown('').classes('w-full p-3 bg-gray-900 text-indigo-300 rounded text-xs hidden mt-4')
+                                    ui.button('EMBED', icon='auto_fix_high', on_click=generate_embedding).props('color=indigo px-8')
+                                embed_res_area = ui.markdown('').classes('w-full p-4 bg-slate-900 border-l-4 border-indigo-500 text-indigo-200 rounded text-xs hidden mt-4 font-mono')
 
-                        vector_res_area = ui.markdown('').classes('w-full p-4 bg-gray-50 border rounded text-sm hidden mt-4 max-h-64 overflow-auto')
+                        vector_res_area = ui.markdown('').classes('w-full p-4 bg-slate-50 border-2 rounded text-sm hidden mt-6 max-h-80 overflow-auto')
 
         # --- LOGS PANEL ---
         with ui.column().classes('w-80'):

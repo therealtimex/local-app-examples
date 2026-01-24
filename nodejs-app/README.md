@@ -6,7 +6,7 @@ A comprehensive demo application showcasing all `@realtimex/sdk` v1.1.0 capabili
 
 - Node.js 18+
 - RealtimeX Desktop running locally
-- A configured Local App with `RTX_APP_ID` environment variable
+- A configured Local App with `RTX_APP_ID` OR an API Key for development mode
 
 ## Installation
 
@@ -80,7 +80,8 @@ These are automatically set by RealtimeX Desktop when running as a Local App:
 
 | Variable | Description |
 |----------|-------------|
-| `RTX_APP_ID` | Your Local App ID |
+| `RTX_APP_ID` | Your Local App ID (Production Mode) |
+| `RTX_API_KEY` | Your API Key (Development Mode) |
 | `RTX_APP_NAME` | Your Local App name |
 
 ## Permissions Required

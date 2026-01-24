@@ -584,39 +584,50 @@ SDK v1.1.0 supports vector RAG.</textarea>
 
         // ==================== LLM: PROVIDERS ====================
         async function fetchProviders() {
-            addLog('Fetching LLM providers...');
-            const data = await api('GET', '/api/llm/providers');
-            const chatSelect = document.getElementById('chat-model-select');
-            const embedSelect = document.getElementById('embed-model-select');
+            addLog('Fetching LLM chat & embedding providers separately...');
 
-            if (data.success) {
-                // LLM Models
-                let chatHtml = '<option value="">Auto-select (Default)</option>';
-                data.llm.forEach(p => {
-                    chatHtml += `<optgroup label="${p.provider}">`;
-                    p.models.forEach(m => {
-                        chatHtml += `<option value="${p.provider}/${m.id}">${m.id}</option>`;
+            try {
+                // Fetch both types of providers in parallel using separate endpoints
+                const [chatData, embedData] = await Promise.all([
+                    api('GET', '/api/llm/providers/chat'),
+                    api('GET', '/api/llm/providers/embed')
+                ]);
+
+                const chatSelect = document.getElementById('chat-model-select');
+                const embedSelect = document.getElementById('embed-model-select');
+
+                // Render Chat Providers
+                if (chatData.success) {
+                    let chatHtml = '<option value="">Auto-select (Default)</option>';
+                    chatData.providers.forEach(p => {
+                        chatHtml += `<optgroup label="${p.provider}">`;
+                        p.models.forEach(m => {
+                            chatHtml += `<option value="${p.provider}/${m.id}">${m.id}</option>`;
+                        });
+                        chatHtml += '</optgroup>';
                     });
-                    chatHtml += '</optgroup>';
-                });
-                chatSelect.innerHTML = chatHtml;
+                    chatSelect.innerHTML = chatHtml;
+                }
 
-                // Embedding Models
-                let embedHtml = '<option value="">Auto-select (Default)</option>';
-                data.embedding.forEach(p => {
-                    embedHtml += `<optgroup label="${p.provider}">`;
-                    p.models.forEach(m => {
-                        embedHtml += `<option value="${p.provider}/${m.id}">${m.id}</option>`;
+                // Render Embedding Providers
+                if (embedData.success) {
+                    let embedHtml = '<option value="">Auto-select (Default)</option>';
+                    embedData.providers.forEach(p => {
+                        embedHtml += `<optgroup label="${p.provider}">`;
+                        p.models.forEach(m => {
+                            embedHtml += `<option value="${p.provider}/${m.id}">${m.id}</option>`;
+                        });
+                        embedHtml += '</optgroup>';
                     });
-                    embedHtml += '</optgroup>';
-                });
-                embedSelect.innerHTML = embedHtml;
+                    embedSelect.innerHTML = embedHtml;
+                }
 
-                addLog(`Loaded models from ${data.llm.length + data.embedding.length} providers`, 'success');
-            } else {
-                addLog(`Error: ${data.error}`, 'error');
+                addLog(`Loaded models (Chat: ${chatData.providers?.length || 0}, Embed: ${embedData.providers?.length || 0})`, 'success');
+            } catch (error) {
+                addLog(`Error fetching providers: ${error.message}`, 'error');
             }
         }
+
 
         // ==================== LLM: CHAT ====================
         async function sendChat() {
@@ -633,9 +644,13 @@ SDK v1.1.0 supports vector RAG.</textarea>
                 return;
             }
 
-            // Parse provider/model
+            // Parse provider/model (handles multi-slash IDs like writer/palmyra)
             let provider, model;
-            if (modelFull) [provider, model] = modelFull.split('/');
+            if (modelFull) {
+                const parts = modelFull.split('/');
+                provider = parts[0];
+                model = parts.slice(1).join('/');
+            }
 
             responseDiv.classList.remove('hidden');
             responseDiv.innerHTML = '<span class="animate-pulse">Thinking...</span>';
@@ -683,7 +698,7 @@ SDK v1.1.0 supports vector RAG.</textarea>
                 }
             } else {
                 addLog('Sending sync chat...');
-                const data = await api('POST', '/api/llm/chat', { messages, model, provider });
+                const data = await api('POST', '/api/llm/chat', { messages, model, provider, response_format: { type: 'text' } });
                 if (data.success) {
                     responseDiv.textContent = data.response?.content || 'No content';
                     addLog(`Chat done: ${data.response?.content?.slice(0, 20)}...`, 'success');
@@ -699,7 +714,11 @@ SDK v1.1.0 supports vector RAG.</textarea>
             const input = document.getElementById('embed-input').value;
             const modelFull = document.getElementById('embed-model-select').value;
             let provider, model;
-            if (modelFull) [provider, model] = modelFull.split('/');
+            if (modelFull) {
+                const parts = modelFull.split('/');
+                provider = parts[0];
+                model = parts.slice(1).join('/');
+            }
 
             addLog('Generating embedding...');
             const data = await api('POST', '/api/llm/embed', { input, provider, model });
@@ -736,7 +755,11 @@ SDK v1.1.0 supports vector RAG.</textarea>
             const workspaceId = document.getElementById('vector-workspace-id').value || undefined;
             const modelFull = document.getElementById('embed-model-select').value;
             let provider, model;
-            if (modelFull) [provider, model] = modelFull.split('/');
+            if (modelFull) {
+                const parts = modelFull.split('/');
+                provider = parts[0];
+                model = parts.slice(1).join('/');
+            }
 
             addLog(`Embedding and storing ${texts.length} texts...`);
             const data = await api('POST', '/api/llm/embed-and-store', {
@@ -760,7 +783,11 @@ SDK v1.1.0 supports vector RAG.</textarea>
             const topK = parseInt(document.getElementById('search-topk').value) || 3;
             const modelFull = document.getElementById('embed-model-select').value;
             let provider, model;
-            if (modelFull) [provider, model] = modelFull.split('/');
+            if (modelFull) {
+                const parts = modelFull.split('/');
+                provider = parts[0];
+                model = parts.slice(1).join('/');
+            }
 
             const documentId = document.getElementById('search-doc-id').value || undefined;
 
@@ -786,7 +813,7 @@ SDK v1.1.0 supports vector RAG.</textarea>
                         <div class="p-3 bg-gray-50 border rounded-lg hover:border-orange-300 transition-colors">
                             <div class="flex justify-between items-center mb-1">
                                 <span class="text-xs font-bold text-orange-600">Match #${i + 1} (Score: ${r.score.toFixed(3)})</span>
-                                <span class="text-[10px] text-gray-400 font-mono">${r.id.slice(0, 8)}...</span>
+                                <span class="text-[10px] text-gray-400 font-mono">${r.id ? `${String(r.id).slice(0, 8)}...` : 'No ID'}</span>
                             </div>
                             <p class="text-sm text-gray-700">${r.metadata?.text || 'No text content'}</p>
                             ${r.metadata?.documentId ? `<span class="text-[10px] bg-blue-100 text-blue-700 px-1 rounded mt-1 inline-block">Doc: ${r.metadata.documentId}</span>` : ''}

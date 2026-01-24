@@ -22,6 +22,9 @@ const app = express();
 
 // Initialize SDK with all permissions
 const sdk = new RealtimeXSDK({
+    realtimex: {
+        apiKey: process.env.RTX_API_KEY, // Added for Dev Mode testing
+    },
     permissions: [
         // Activities
         'activities.read',
@@ -68,11 +71,21 @@ const startServer = async () => {
 
     // ========================
     // Health Check
-    // ========================
     app.get('/health', (req, res) => {
         res.json({ status: 'ok', timestamp: new Date().toISOString() });
     });
 
+    // SDK Ping Test
+    // app.get('/api/ping', async (req, res) => {
+    //     try {
+    //         const result = await sdk.ping();
+    //         res.json(result);
+    //     } catch (error: any) {
+    //         res.status(500).json({ success: false, error: error.message });
+    //     }
+    // });
+    const result = await sdk.ping();
+    console.log(result);
     // Start server
     app.listen(PORT, () => {
         console.log(`\n🚀 RealtimeX Node.js Demo running at http://localhost:${PORT}`);
