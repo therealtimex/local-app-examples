@@ -86,6 +86,8 @@ const startServer = async () => {
     // });
     const result = await sdk.ping();
     console.log(result);
+    const dataDir = await sdk.getAppDataDir();
+    console.log(dataDir);
     // Start server
     app.listen(PORT, () => {
         console.log(`\n🚀 RealtimeX Node.js Demo running at http://localhost:${PORT}`);

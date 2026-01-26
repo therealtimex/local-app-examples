@@ -271,9 +271,12 @@
                     </div>
 
                     <div class="flex border-b mb-6">
-                        <button onclick="showVectorPanel('embed-store')"
+                        <button onclick="showVectorPanel('discovery')"
                             class="v-tab-btn active px-4 py-2 text-sm border-b-2 border-orange-500 text-orange-600 font-bold"
-                            data-vtab="embed-store">1. Ingest Data</button>
+                            data-vtab="discovery">0. DB Discovery</button>
+                        <button onclick="showVectorPanel('embed-store')"
+                            class="v-tab-btn px-4 py-2 text-sm text-gray-400" data-vtab="embed-store">1. Ingest
+                            Data</button>
                         <button onclick="showVectorPanel('search')" class="v-tab-btn px-4 py-2 text-sm text-gray-400"
                             data-vtab="search">2. Search Test</button>
                         <button onclick="showVectorPanel('embed-only')"
@@ -281,8 +284,57 @@
                             Embedding</button>
                     </div>
 
+                    <!-- Discovery & Registration (Step 0) -->
+                    <div id="vector-discovery" class="vector-panel space-y-4">
+                        <div class="bg-gray-50 p-3 rounded-lg border border-gray-200 mb-4">
+                            <p class="text-xs text-gray-800"><strong>Step 0: Discovery & Registration.</strong>
+                                Find supported vector databases and register specific storage for this app.</p>
+                        </div>
+
+                        <!-- Current DB Config -->
+                        <div id="current-vector-db"
+                            class="hidden mb-6 p-4 bg-blue-50 border border-blue-100 rounded-xl">
+                            <h4 class="text-xs font-bold text-blue-600 uppercase mb-2 flex items-center gap-2">
+                                <span class="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
+                                Active Vector Database
+                            </h4>
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <p id="current-db-name"
+                                        class="text-sm font-bold text-gray-800 uppercase tracking-tight">-</p>
+                                    <p id="current-db-details"
+                                        class="text-[10px] text-gray-500 font-mono mt-1 break-all"></p>
+                                </div>
+                                <button onclick="listVectorProviders()"
+                                    class="text-[10px] font-bold text-blue-500 hover:underline">Change</button>
+                            </div>
+                        </div>
+
+                        <div class="flex gap-2">
+                            <button onclick="listVectorProviders()"
+                                class="flex-1 py-2 bg-gray-800 text-white rounded-lg hover:bg-black font-bold uppercase text-xs">List
+                                Vector Providers</button>
+                        </div>
+                        <div id="vector-providers-list" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <!-- Providers inject here -->
+                        </div>
+
+                        <!-- Registration Form -->
+                        <div id="registration-form"
+                            class="hidden mt-6 p-4 border-2 border-dashed border-gray-300 rounded-xl bg-white">
+                            <h4 class="text-sm font-bold mb-4 flex items-center gap-2">
+                                <span class="w-2 h-2 bg-blue-500 rounded-full"></span>
+                                Register <span id="reg-provider-name" class="text-blue-600"></span>
+                            </h4>
+                            <div id="reg-fields" class="space-y-3"></div>
+                            <button onclick="registerVectorConfig()"
+                                class="mt-4 w-full py-2 bg-blue-600 text-white rounded-lg font-bold text-xs uppercase">Save
+                                Configuration</button>
+                        </div>
+                    </div>
+
                     <!-- Ingest Data (Step 1) -->
-                    <div id="vector-embed-store" class="vector-panel space-y-4">
+                    <div id="vector-embed-store" class="vector-panel space-y-4 hidden">
                         <div class="bg-orange-50 p-3 rounded-lg border border-orange-100 mb-4">
                             <p class="text-xs text-orange-800"><strong>Step 1: Ingest Data.</strong> Prepare your
                                 knowledge base. The SDK will automatically chunk your text and store them as vectors.
@@ -798,34 +850,137 @@ SDK v1.1.0 supports vector RAG.</textarea>
             const data = await api('POST', '/api/llm/search', {
                 query,
                 topK,
-                document_id: documentId,
                 workspaceId,
+                documentId,
                 provider,
                 model
             });
 
-            const div = document.getElementById('vector-result');
-            div.classList.remove('hidden');
-
+            const resultDiv = document.getElementById('vector-result');
+            resultDiv.classList.remove('hidden');
             if (data.success) {
                 if (data.results && data.results.length > 0) {
-                    div.innerHTML = data.results.map((r, i) => `
-                        <div class="p-3 bg-gray-50 border rounded-lg hover:border-orange-300 transition-colors">
-                            <div class="flex justify-between items-center mb-1">
-                                <span class="text-xs font-bold text-orange-600">Match #${i + 1} (Score: ${r.score.toFixed(3)})</span>
-                                <span class="text-[10px] text-gray-400 font-mono">${r.id ? `${String(r.id).slice(0, 8)}...` : 'No ID'}</span>
+                    resultDiv.innerHTML = data.results.map((r, i) => `
+                        <div class="p-3 bg-blue-50 border border-blue-100 rounded-lg">
+                            <div class="flex justify-between items-start mb-1">
+                                <span class="text-[10px] font-bold text-blue-400 uppercase">Result #${i + 1}</span>
+                                <span class="text-[10px] bg-blue-200 text-blue-700 px-1.5 py-0.5 rounded font-mono">Score: ${r.score?.toFixed(4) || 'N/A'}</span>
                             </div>
-                            <p class="text-sm text-gray-700">${r.metadata?.text || 'No text content'}</p>
-                            ${r.metadata?.documentId ? `<span class="text-[10px] bg-blue-100 text-blue-700 px-1 rounded mt-1 inline-block">Doc: ${r.metadata.documentId}</span>` : ''}
+                            <p class="text-xs text-gray-700 leading-relaxed">${r.metadata.text}</p>
+                            ${r.metadata ? `<div class="mt-2 text-[9px] text-gray-400 font-mono italic truncate">Meta: ${JSON.stringify(r.metadata)}</div>` : ''}
                         </div>
                     `).join('');
                     addLog(`Found ${data.results.length} results`, 'success');
                 } else {
-                    div.innerHTML = '<div class="p-8 text-center text-gray-400 text-sm italic">No results found. Try ingesting data first!</div>';
+                    resultDiv.innerHTML = '<div class="p-8 text-center text-gray-400 text-sm italic">No results found. Try ingesting data first!</div>';
                 }
             } else {
-                div.innerHTML = `<div class="p-4 bg-red-50 text-red-500 text-xs">${data.error}</div>`;
+                resultDiv.innerHTML = `<div class="p-4 text-red-500 text-xs italic">Error: ${data.error}</div>`;
                 addLog(`Search error: ${data.error}`, 'error');
+            }
+        }
+
+        // ==================== VECTOR DISCOVERY ====================
+        let currentProviders = [];
+        let registrationProvider = null;
+
+        async function listVectorProviders() {
+            addLog('Listing vector providers...');
+            const data = await api('GET', '/api/llm/vectors/providers');
+            const list = document.getElementById('vector-providers-list');
+            if (data.success) {
+                currentProviders = data.providers;
+                list.innerHTML = data.providers.map(p => `
+                    <div class="p-4 border rounded-xl hover:shadow-md transition-shadow bg-white text-left group">
+                        <h5 class="text-sm font-bold text-gray-800">${p.label}</h5>
+                        <p class="text-[11px] text-gray-500 mb-3">${p.description}</p>
+                        <button onclick="showRegistration('${p.name}')" class="text-[11px] font-bold text-blue-500 group-hover:underline">CONFIGURE &rarr;</button>
+                    </div>
+                `).join('');
+                addLog(`Found ${data.providers.length} vector providers`, 'success');
+            } else {
+                addLog(`Error: ${data.error}`, 'error');
+            }
+        }
+
+        function showRegistration(providerName) {
+            const provider = currentProviders.find(p => p.name === providerName);
+            if (!provider) return;
+
+            registrationProvider = providerName;
+            document.getElementById('reg-provider-name').textContent = provider.label;
+            const fieldsDiv = document.getElementById('reg-fields');
+
+            fieldsDiv.innerHTML = provider.fields.map(f => `
+                <div>
+                    <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">${f.label}</label>
+                    <input type="${f.type}" id="reg-field-${f.name}" placeholder="${f.placeholder || ''}" 
+                        class="w-full px-4 py-2 border rounded-lg text-sm bg-gray-50 focus:bg-white transition-colors">
+                </div>
+            `).join('');
+
+            document.getElementById('registration-form').classList.remove('hidden');
+            document.getElementById('registration-form').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // ==================== VECTOR CONFIG ====================
+        async function updateVectorConfigDisplay() {
+            try {
+                const data = await api('GET', '/api/llm/vectors/config');
+                const configDiv = document.getElementById('current-vector-db');
+                if (data.success && data.provider) {
+                    document.getElementById('current-db-name').textContent = data.provider;
+
+                    // Format display details
+                    let details = '';
+                    if (data.provider === 'lancedb') {
+                        details = `URI: ${data.config?.uri || 'Default'}`;
+                    } else if (data.provider === 'pgvector') {
+                        // Mask the password in connection string for security
+                        let url = data.config?.databaseUrl || '';
+                        if (url.includes(':') && url.includes('@')) {
+                            const [prefix, rest] = url.split('://');
+                            const [auth, host] = rest.split('@');
+                            const [user, pass] = auth.split(':');
+                            details = `${prefix}://${user}:****@${host}\nTable: ${data.config?.tableName || 'default'}`;
+                        } else {
+                            details = `Table: ${data.config?.tableName || 'default'}`;
+                        }
+                    } else if (data.config) {
+                        details = Object.entries(data.config)
+                            .map(([k, v]) => `${k}: ${typeof v === 'string' && v.length > 20 ? v.slice(0, 20) + '...' : v}`)
+                            .join(', ');
+                    }
+
+                    document.getElementById('current-db-details').textContent = details;
+                    configDiv.classList.remove('hidden');
+                } else {
+                    configDiv.classList.add('hidden');
+                }
+            } catch (error) {
+                console.error('Error fetching vector config:', error);
+            }
+        }
+
+        async function registerVectorConfig() {
+            const provider = currentProviders.find(p => p.name === registrationProvider);
+            if (!provider) return;
+
+            const config = {};
+            provider.fields.forEach(f => {
+                config[f.name] = document.getElementById(`reg-field-${f.name}`).value;
+            });
+
+            addLog(`Registering custom config for ${provider.label}...`);
+            const data = await api('POST', '/api/llm/vectors/register', { provider: registrationProvider, config });
+
+            if (data.success) {
+                addLog('Successfully registered custom storage!', 'success');
+                document.getElementById('registration-form').classList.add('hidden');
+                addLog('App will now use this storage for all vector operations.', 'info');
+                await updateVectorConfigDisplay(); // Refresh display
+            } else {
+                addLog(`Registration failed: ${data.error}`, 'error');
             }
         }
 
@@ -854,6 +1009,7 @@ SDK v1.1.0 supports vector RAG.</textarea>
             await loadAppInfo();
             await refreshActivities();
             await fetchVectorWorkspaces();
+            await updateVectorConfigDisplay();
             addLog('Ready!', 'success');
         };
     </script>

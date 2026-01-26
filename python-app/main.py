@@ -492,6 +492,18 @@ async def main_page():
                     ui.button(icon='delete_sweep', on_click=lambda: (state.logs.clear(), log_area.set_content(""))).props('flat round size=xs color=slate-400')
                 log_area = ui.html('').classes('text-[10px] font-mono leading-tight whitespace-pre-wrap overflow-auto h-[70vh]')
 
+    # Initial diagnostics
+    try:
+        res = await sdk.ping()
+        print(f"SDK Ping: {res}")
+        data_dir = await sdk.get_app_data_dir()
+        print(f"App Data Dir: {data_dir}")
+        add_log(f"Connected as: {res.get('appId')}")
+        add_log(f"Storage: {data_dir}")
+    except Exception as e:
+        print(f"SDK Init Error: {e}")
+        add_log(f"SDK Init Error: {e}", 'error')
+
     # Initial load
     await asyncio.gather(
         refresh_activities(), 

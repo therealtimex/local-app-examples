@@ -9,7 +9,7 @@
         "start": "node dist/index.js"
     },
     "dependencies": {
-        "@realtimex/sdk": "^1.1.3",
+        "@realtimex/sdk": "^1.1.4",
         "express": "^4.18.2"
     },
     "devDependencies": {

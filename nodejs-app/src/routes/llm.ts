@@ -190,6 +190,45 @@ export function createLLMRoutes(sdk: RealtimeXSDK): Router {
         }
     });
 
+    // GET /vectors/providers - List supported vector database providers
+    router.get('/vectors/providers', async (req: Request, res: Response) => {
+        try {
+            const response = await sdk.llm.vectors.listProviders();
+            res.json(response);
+        } catch (error: any) {
+            handleLLMError(error, res);
+        }
+    });
+
+    // GET /vectors/config - Get current vector configuration
+    router.get('/vectors/config', async (req: Request, res: Response) => {
+        try {
+            const response = await sdk.llm.vectors.getConfig();
+            res.json(response);
+        } catch (error: any) {
+            handleLLMError(error, res);
+        }
+    });
+
+    // POST /vectors/register - Register custom vector database configuration
+    router.post('/vectors/register', async (req: Request, res: Response) => {
+        try {
+            const { provider, config } = req.body;
+
+            if (!provider || !config) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'provider and config are required'
+                });
+            }
+
+            const response = await sdk.llm.vectors.registerConfig(provider, config);
+            res.json(response);
+        } catch (error: any) {
+            handleLLMError(error, res);
+        }
+    });
+
     // ========================
     // RAG Helper Endpoints
     // ========================
