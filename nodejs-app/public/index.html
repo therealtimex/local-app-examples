@@ -73,6 +73,9 @@
             <button onclick="switchTab('llm')" class="tab-btn px-4 py-4 text-sm" data-tab="llm">
                 🤖 LLM & Vectors
             </button>
+            <button onclick="switchTab('tts')" class="tab-btn px-4 py-4 text-sm" data-tab="tts">
+                🔊 TTS
+            </button>
         </div>
     </nav>
 
@@ -410,6 +413,119 @@ SDK v1.1.0 supports vector RAG.</textarea>
                         <div id="embed-result"
                             class="p-3 bg-gray-900 text-indigo-300 border rounded-lg text-xs font-mono hidden overflow-auto max-h-32">
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ==================== TTS TAB ==================== -->
+            <div id="tab-tts" class="tab-content space-y-6">
+                <div class="bg-white rounded-xl shadow-sm border p-6">
+                    <h2 class="text-lg font-bold text-purple-600 mb-4">🔊 Text-to-Speech Demo</h2>
+
+                    <!-- Provider Selection -->
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">TTS Provider</label>
+                            <select id="tts-provider-select" onchange="updateTTSConfigUI()"
+                                class="w-full px-4 py-2 border rounded-lg text-sm">
+                                <option value="">Loading providers...</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Voice</label>
+                            <select id="tts-voice-select" class="w-full px-4 py-2 border rounded-lg text-sm">
+                                <option value="">Default</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Config Options (Speed, Language, Quality) -->
+                    <div id="tts-config-row" class="grid grid-cols-3 gap-4 mb-4">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Speed</label>
+                            <input type="range" id="tts-speed-range" min="0.5" max="2.0" step="0.1" value="1.0"
+                                class="w-full"
+                                oninput="document.getElementById('tts-speed-value').textContent = this.value">
+                            <div class="text-xs text-gray-500 text-center"><span id="tts-speed-value">1.0</span>x</div>
+                        </div>
+                        <div id="tts-language-container">
+                            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Language</label>
+                            <select id="tts-language-select" class="w-full px-4 py-2 border rounded-lg text-sm">
+                                <option value="en">English</option>
+                                <option value="es">Spanish</option>
+                                <option value="pt">Portuguese</option>
+                                <option value="fr">French</option>
+                                <option value="ko">Korean</option>
+                            </select>
+                        </div>
+                        <div id="tts-quality-container">
+                            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Quality</label>
+                            <input type="range" id="tts-quality-range" min="1" max="20" step="1" value="10"
+                                class="w-full"
+                                oninput="document.getElementById('tts-quality-value').textContent = this.value">
+                            <div class="text-xs text-gray-500 text-center"><span id="tts-quality-value">10</span>/20
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Text Input -->
+                    <div class="mb-4">
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Text to Speak</label>
+                        <textarea id="tts-text-input" rows="4" class="w-full px-4 py-2 border rounded-lg text-sm"
+                            placeholder="Enter text to convert to speech...">Hello! This is a test of the RealtimeX Text-to-Speech SDK. You can use this to generate audio from any text.</textarea>
+                    </div>
+
+                    <!-- Generate Buttons -->
+                    <div class="flex gap-4 mb-4">
+                        <button onclick="generateTTS()"
+                            class="flex-1 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-bold">
+                            🎤 Generate Speech
+                        </button>
+                        <button onclick="generateTTSChunked()"
+                            class="flex-1 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-bold">
+                            📊 Stream Chunks
+                        </button>
+                    </div>
+
+                    <!-- Provider Info -->
+                    <div id="tts-provider-info" class="text-xs text-gray-500 mb-4 p-2 bg-gray-50 rounded hidden"></div>
+
+                    <!-- Audio Player -->
+                    <div id="tts-audio-container" class="hidden">
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-2">Generated Audio</label>
+                        <div class="bg-gray-100 rounded-lg p-4">
+                            <audio id="tts-audio-player" controls class="w-full">
+                                Your browser does not support the audio element.
+                            </audio>
+                            <div class="flex justify-between items-center mt-2 text-xs text-gray-500">
+                                <span id="tts-audio-info">-</span>
+                                <button onclick="downloadTTSAudio()"
+                                    class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300">
+                                    💾 Download
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Chunks Progress -->
+                    <div id="tts-chunks-progress" class="hidden mt-4">
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-2">Streaming Progress</label>
+                        <div class="bg-gray-100 rounded-lg p-4">
+                            <div class="flex justify-between text-xs text-gray-600 mb-2">
+                                <span>Chunk <span id="tts-chunk-current">0</span>/<span
+                                        id="tts-chunk-total">0</span></span>
+                                <span id="tts-chunk-text" class="truncate max-w-xs"></span>
+                            </div>
+                            <div class="w-full bg-gray-300 rounded-full h-2">
+                                <div id="tts-chunks-bar" class="bg-indigo-600 h-2 rounded-full transition-all"
+                                    style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Error Display -->
+                    <div id="tts-error"
+                        class="hidden mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                     </div>
                 </div>
             </div>
@@ -1004,12 +1120,328 @@ SDK v1.1.0 supports vector RAG.</textarea>
             }
         }
 
+        // ==================== TTS ====================
+        let currentTTSAudioBlob = null;
+        let audioPlaybackQueue = [];
+        let isPlaybackPlaying = false;
+        let currentPlaybackIndex = 0;
+
+        let ttsProvidersCache = [];
+
+        async function fetchTTSProviders() {
+            addLog('Fetching TTS providers...');
+            try {
+                const data = await api('GET', '/api/tts/providers');
+                const select = document.getElementById('tts-provider-select');
+
+                if (data.success && data.providers) {
+                    ttsProvidersCache = data.providers;
+                    let html = '';
+                    data.providers.forEach(p => {
+                        const streaming = p.supportsStreaming ? ' (Streaming)' : '';
+                        const local = p.type === 'client' ? ' [LOCAL]' : '';
+                        html += `<option value="${p.id}">${p.name}${streaming}${local}</option>`;
+                    });
+                    select.innerHTML = html;
+                    addLog(`Loaded ${data.providers.length} TTS providers`, 'success');
+                    updateTTSConfigUI();
+                } else {
+                    select.innerHTML = '<option value="">No providers available</option>';
+                    addLog('No TTS providers found', 'error');
+                }
+            } catch (error) {
+                addLog(`Error fetching TTS providers: ${error.message}`, 'error');
+                document.getElementById('tts-provider-select').innerHTML = '<option value="">Error loading providers</option>';
+            }
+        }
+
+        function updateTTSConfigUI() {
+            const providerId = document.getElementById('tts-provider-select').value;
+            const provider = ttsProvidersCache.find(p => p.id === providerId);
+            const voiceSelect = document.getElementById('tts-voice-select');
+            const languageContainer = document.getElementById('tts-language-container');
+            const qualityContainer = document.getElementById('tts-quality-container');
+            const providerInfo = document.getElementById('tts-provider-info');
+
+            if (!provider) return;
+
+            // Update voice options
+            if (provider.config?.voices?.length) {
+                voiceSelect.innerHTML = '<option value="">Default</option>' +
+                    provider.config.voices.map(v => `<option value="${v}">${v}</option>`).join('');
+            } else {
+                voiceSelect.innerHTML = '<option value="">Default</option>';
+            }
+
+            // Show/hide language (only for Supertonic)
+            if (provider.config?.languages?.length) {
+                languageContainer.classList.remove('hidden');
+            } else {
+                languageContainer.classList.add('hidden');
+            }
+
+            // Show/hide quality (only for Supertonic)
+            if (provider.config?.quality) {
+                qualityContainer.classList.remove('hidden');
+            } else {
+                qualityContainer.classList.add('hidden');
+            }
+
+            // Show provider info
+            if (provider.note) {
+                providerInfo.textContent = provider.note;
+                providerInfo.classList.remove('hidden');
+            } else {
+                providerInfo.classList.add('hidden');
+            }
+        }
+
+        async function generateTTS() {
+            const text = document.getElementById('tts-text-input').value.trim();
+            const provider = document.getElementById('tts-provider-select').value;
+            const voice = document.getElementById('tts-voice-select').value;
+            const speed = parseFloat(document.getElementById('tts-speed-range').value);
+            const language = document.getElementById('tts-language-select').value;
+            const num_inference_steps = parseInt(document.getElementById('tts-quality-range').value);
+            const audioContainer = document.getElementById('tts-audio-container');
+            const audioPlayer = document.getElementById('tts-audio-player');
+            const audioInfo = document.getElementById('tts-audio-info');
+            const errorDiv = document.getElementById('tts-error');
+
+            if (!text) {
+                addLog('Please enter text to speak', 'error');
+                return;
+            }
+
+            addLog(`Generating speech with ${provider || 'default'} (speed: ${speed}x)...`);
+            errorDiv.classList.add('hidden');
+            audioContainer.classList.add('hidden');
+
+            try {
+                const body = { text, provider };
+                if (voice) body.voice = voice;
+                if (speed !== 1.0) body.speed = speed;
+                if (language) body.language = language;
+                if (num_inference_steps !== 10) body.num_inference_steps = num_inference_steps;
+
+                const response = await fetch('/api/tts/speak', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'TTS generation failed');
+                }
+
+                // Get audio blob
+                const audioBlob = await response.blob();
+                currentTTSAudioBlob = audioBlob;
+
+                // Create object URL and set audio source
+                const audioUrl = URL.createObjectURL(audioBlob);
+                audioPlayer.src = audioUrl;
+
+                // Show info
+                const sizeKB = (audioBlob.size / 1024).toFixed(1);
+                audioInfo.textContent = `Size: ${sizeKB} KB | Type: ${audioBlob.type || 'audio/mpeg'}`;
+
+                audioContainer.classList.remove('hidden');
+                addLog(`Speech generated: ${sizeKB} KB`, 'success');
+
+                // Auto-play
+                audioPlayer.play().catch(() => { });
+
+            } catch (error) {
+                errorDiv.textContent = error.message;
+                errorDiv.classList.remove('hidden');
+                addLog(`TTS error: ${error.message}`, 'error');
+            }
+        }
+        async function generateTTSChunked() {
+            const text = document.getElementById('tts-text-input').value.trim();
+            const provider = document.getElementById('tts-provider-select').value;
+            const voice = document.getElementById('tts-voice-select').value;
+            const speed = parseFloat(document.getElementById('tts-speed-range').value);
+            const language = document.getElementById('tts-language-select').value;
+            const num_inference_steps = parseInt(document.getElementById('tts-quality-range').value);
+
+            const progressContainer = document.getElementById('tts-chunks-progress');
+            const progressBar = document.getElementById('tts-chunks-bar');
+            const currentCount = document.getElementById('tts-chunk-current');
+            const totalCount = document.getElementById('tts-chunk-total');
+            const currentText = document.getElementById('tts-chunk-text');
+            const errorDiv = document.getElementById('tts-error');
+            const audioContainer = document.getElementById('tts-audio-container');
+            const audioPlayer = document.getElementById('tts-audio-player');
+
+            if (!text) {
+                addLog('Please enter text to speak', 'error');
+                return;
+            }
+
+            addLog(`Starting chunked streaming with ${provider}...`);
+            errorDiv.classList.add('hidden');
+            progressContainer.classList.remove('hidden');
+            audioContainer.classList.add('hidden');
+
+            // Reset progress
+            progressBar.style.width = '0%';
+            currentCount.textContent = '0';
+            totalCount.textContent = '0';
+            currentText.textContent = 'Starting...';
+
+            let audioChunks = [];
+            let totalChunks = 0;
+
+            // Playback state for this request
+            audioPlaybackQueue = [];
+            currentPlaybackIndex = 0;
+            isPlaybackPlaying = false;
+
+            audioPlayer.onended = () => {
+                currentPlaybackIndex++;
+                playNextChunkInQueue();
+            };
+
+            async function playNextChunkInQueue() {
+                // If something is already playing, don't interrupt
+                if (isPlaybackPlaying && !audioPlayer.paused && !audioPlayer.ended) return;
+
+                if (currentPlaybackIndex >= audioPlaybackQueue.length) {
+                    // We've reached the end of what we've downloaded so far
+                    isPlaybackPlaying = false;
+                    if (currentPlaybackIndex >= totalChunks && totalChunks > 0) {
+                        addLog('Finished playing all chunks', 'success');
+                    }
+                    return;
+                }
+
+                const chunk = audioPlaybackQueue[currentPlaybackIndex];
+                if (!chunk) {
+                    isPlaybackPlaying = false;
+                    return;
+                }
+
+                isPlaybackPlaying = true;
+                const audioBlob = await (await fetch(`data:${chunk.mimeType || 'audio/wav'};base64,${chunk.audio}`)).blob();
+                const audioUrl = URL.createObjectURL(audioBlob);
+                audioPlayer.src = audioUrl;
+                audioContainer.classList.remove('hidden');
+                audioPlayer.play().catch(err => {
+                    console.error('Playback error:', err);
+                    isPlaybackPlaying = false;
+                });
+            }
+
+            try {
+                const body = { text, provider };
+                if (voice) body.voice = voice;
+                if (speed !== 1.0) body.speed = speed;
+                if (language) body.language = language;
+                if (num_inference_steps !== 10) body.num_inference_steps = num_inference_steps;
+
+                const response = await fetch('/api/tts/speak/stream', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Streaming failed');
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                let eventType = '';
+
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+
+                    for (const line of lines) {
+                        const trimmedLine = line.trim();
+                        if (!trimmedLine) continue;
+
+                        if (trimmedLine.startsWith('event:')) {
+                            eventType = trimmedLine.slice(6).trim();
+                        } else if (trimmedLine.startsWith('data:')) {
+                            const data = JSON.parse(trimmedLine.slice(5).trim());
+
+                            if (eventType === 'info') {
+                                totalChunks = data.totalChunks;
+                                totalCount.textContent = totalChunks;
+                                addLog(`Split text into ${totalChunks} chunks`, 'info');
+                            } else if (eventType === 'chunk') {
+                                const index = data.index;
+                                audioChunks[index] = data;
+                                currentCount.textContent = index + 1;
+                                currentText.textContent = data.text;
+                                const percent = ((index + 1) / totalChunks) * 100;
+                                progressBar.style.width = `${percent}%`;
+                                addLog(`Received chunk ${index + 1}/${totalChunks}`, 'info');
+
+                                // Add to queue and start playing if not already
+                                audioPlaybackQueue[index] = data;
+                                addLog(`Queued chunk ${index + 1} (${(data.audio.length / 1.33 / 1024).toFixed(1)} KB) - mime: ${data.mimeType}`, 'info');
+                                if (!isPlaybackPlaying) {
+                                    playNextChunkInQueue();
+                                }
+                            } else if (eventType === 'error') {
+                                addLog(`Chunk error: ${data.error}`, 'error');
+                            }
+                            eventType = '';
+                        }
+                    }
+                }
+
+                if (audioPlaybackQueue.length > 0) {
+                    addLog('Streamed audio ready', 'success');
+                    // Entire stream finished, we've been playing along
+                    document.getElementById('tts-audio-info').textContent = `Streamed and played ${totalChunks} chunks`;
+                } else {
+                    throw new Error('No audio chunks received');
+                }
+
+            } catch (error) {
+                errorDiv.textContent = error.message;
+                errorDiv.classList.remove('hidden');
+                addLog(`Streaming error: ${error.message}`, 'error');
+            }
+        }
+
+        function downloadTTSAudio() {
+            if (!currentTTSAudioBlob) {
+                addLog('No audio to download', 'error');
+                return;
+            }
+
+            const url = URL.createObjectURL(currentTTSAudioBlob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `tts_audio_${Date.now()}.mp3`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            addLog('Downloaded audio file', 'success');
+        }
+
         // ==================== INIT ====================
         window.onload = async () => {
             await loadAppInfo();
             await refreshActivities();
             await fetchVectorWorkspaces();
             await updateVectorConfigDisplay();
+            await fetchTTSProviders();
             addLog('Ready!', 'success');
         };
     </script>

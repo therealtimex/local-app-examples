@@ -17,6 +17,7 @@ import { createActivitiesRoutes } from './routes/activities';
 import { createApiRoutes } from './routes/api';
 import { createWebhookRoutes } from './routes/webhook';
 import { createLLMRoutes } from './routes/llm';
+import { createTTSRoutes } from './routes/tts';
 
 const app = express();
 
@@ -43,6 +44,8 @@ const sdk = new RealtimeXSDK({
         // Vectors
         'vectors.read',
         'vectors.write',
+        // TTS
+        'tts.generate',
     ],
 });
 
@@ -68,6 +71,9 @@ const startServer = async () => {
 
     // LLM & Vectors: /api/llm/*
     app.use('/api/llm', createLLMRoutes(sdk));
+
+    // TTS: /api/tts/*
+    app.use('/api/tts', createTTSRoutes(sdk));
 
     // ========================
     // Health Check
@@ -106,6 +112,8 @@ const startServer = async () => {
         console.log('   Embeddings:  POST /api/llm/embed');
         console.log('   Vectors:     POST /api/llm/vectors/*');
         console.log('   RAG Search:  POST /api/llm/search');
+        console.log('   TTS:         GET  /api/tts/providers');
+        console.log('   TTS:         POST /api/tts/speak');
     });
 };
 

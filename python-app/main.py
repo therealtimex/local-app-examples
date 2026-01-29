@@ -9,9 +9,25 @@ from realtimex_sdk import RealtimeXSDK, SDKConfig, PermissionDeniedError, LLMPro
 # Initialize SDK with all permissions
 sdk = RealtimeXSDK(config=SDKConfig(
     permissions=[
-        'api.agents', 'api.workspaces', 'api.threads', 'api.task',
-        'webhook.trigger', 'activities.read', 'activities.write',
-        'llm.chat', 'llm.embed', 'llm.providers', 'vectors.read', 'vectors.write'
+        # Activities
+        'activities.read',
+        'activities.write',
+        # API
+        'api.agents',
+        'api.workspaces',
+        'api.threads',
+        'api.task',
+        # Webhook
+        'webhook.trigger',
+        # LLM
+        'llm.chat',
+        'llm.embed',
+        'llm.providers',
+        # Vectors
+        'vectors.read',
+        'vectors.write',
+        # TTS
+        'tts.generate'
     ]
 ))
 
@@ -25,6 +41,14 @@ class State:
     providers: Dict[str, Any] = {}
     chat_model: str = ""
     embed_model: str = ""
+    tts_providers: List[Dict[str, Any]] = []
+    tts_audio_data: bytes = b''
+    # Task Simulation
+    simulated_task_uuid: str = ""
+    simulated_task_status: str = "idle"  # idle, processing, completed, failed
+    # System Status
+    ping_result: Dict[str, Any] = {}
+    data_dir: str = ""
 
 state = State()
 
@@ -39,6 +63,16 @@ def add_log(msg: str, type: str = 'info'):
         state.logs.pop(0)
     if 'log_area' in globals():
         log_area.set_content("\n".join(state.logs[::-1]))
+
+async def refresh_system_status():
+    try:
+        state.ping_result = await sdk.ping()
+        state.data_dir = await sdk.get_app_data_dir()
+        if 'status_card' in globals():
+            status_card.update()
+        add_log("System status refreshed", 'success')
+    except Exception as e:
+        add_log(f"System status error: {e}", 'error')
 
 # --- SDK Actions ---
 
@@ -135,12 +169,57 @@ async def fetch_task_status():
     uuid = task_uuid_input.value.strip()
     if not uuid: return
     try:
-        task = await sdk.api.get_task(uuid)
-        status = task.get('status', 'unknown')
-        task_status_label.set_text(f"Status: {status} | Source: {task.get('sourceAppName', '-')}")
+        task_data = await sdk.api.get_task(uuid)
+        status = task_data.get('status', 'unknown')
+        task_status_label.set_text(f"Status: {status} | Source: {task_data.get('sourceAppName', '-')}")
+        
+        # Correctly update JsonEditor properties
+        task_meta_area.properties['content'] = {'json': task_data}
+        task_meta_area.update()
+        
         add_log(f"Task {uuid[:8]}: {status}", 'success')
     except Exception as e:
         add_log(f"Fetch failed: {e}", 'error')
+
+# --- Task Simulation Actions ---
+
+async def start_simulated_task():
+    try:
+        uuid = task_uuid_input.value.strip()
+        if not uuid:
+            ui.notify("Enter Task UUID to simulate", type='warning')
+            return
+        
+        add_log(f"Reporting task STARTED: {uuid[:8]}...")
+        await sdk.task.start(uuid)
+        state.simulated_task_uuid = uuid
+        state.simulated_task_status = "processing"
+        add_log("Status: PROCESSING", 'success')
+        await fetch_task_status()
+    except Exception as e:
+        add_log(f"Task Start Error: {e}", 'error')
+
+async def complete_simulated_task():
+    try:
+        if not state.simulated_task_uuid: return
+        add_log(f"Reporting task COMPLETE: {state.simulated_task_uuid[:8]}...")
+        await sdk.task.complete(state.simulated_task_uuid, result={"message": "Task processed successfully via Python SDK Demo"})
+        state.simulated_task_status = "completed"
+        add_log("Status: COMPLETED", 'success')
+        await fetch_task_status()
+    except Exception as e:
+        add_log(f"Task Complete Error: {e}", 'error')
+
+async def fail_simulated_task(error_msg: str):
+    try:
+        if not state.simulated_task_uuid: return
+        add_log(f"Reporting task FAILED: {state.simulated_task_uuid[:8]}...")
+        await sdk.task.fail(state.simulated_task_uuid, error=error_msg)
+        state.simulated_task_status = "failed"
+        add_log(f"Status: FAILED ({error_msg})", 'error')
+        await fetch_task_status()
+    except Exception as e:
+        add_log(f"Task Fail Error: {e}", 'error')
 
 async def fetch_vector_workspaces():
     try:
@@ -333,15 +412,203 @@ async def delete_all_vectors():
         except Exception as e:
             add_log(f"Delete failed: {e}", 'error')
 
+# --- TTS Actions ---
+
+async def fetch_tts_providers():
+    try:
+        add_log("Fetching TTS providers...")
+        providers = await sdk.tts.list_providers()
+        state.tts_providers = providers
+        
+        # Build select options
+        opts = {}
+        for p in providers:
+            if p.get('configured'):
+                provider_id = p.get('id')
+                name = p.get('name', provider_id)
+                ptype = p.get('type', 'unknown')
+                opts[provider_id] = f"[{ptype}] {name}"
+        
+        tts_provider_select.options = opts
+        tts_provider_select.update()
+        
+        # Also update voices when provider changes
+        add_log(f"Loaded {len(opts)} configured TTS providers", 'success')
+    except Exception as e:
+        add_log(f"TTS providers error: {e}", 'error')
+
+async def update_tts_voices():
+    provider_id = tts_provider_select.value
+    if not provider_id:
+        return
+    
+    # Find provider config
+    provider = next((p for p in state.tts_providers if p.get('id') == provider_id), None)
+    if not provider:
+        return
+    
+    config = provider.get('config', {})
+    voices = config.get('voices', [])
+    
+    # Update voice select
+    voice_opts = {v: v for v in voices}
+    tts_voice_select.options = voice_opts
+    tts_voice_select.value = voices[0] if voices else None
+    tts_voice_select.update()
+    
+    # Languages for some providers
+    languages = config.get('languages', [])
+    if languages:
+        lang_opts = {l: l for l in languages}
+        tts_language_select.options = lang_opts
+        tts_language_select.set_visibility(True)
+    else:
+        tts_language_select.set_visibility(False)
+
+async def tts_speak():
+    text = tts_text_input.value.strip()
+    if not text:
+        ui.notify("Enter text to speak", type='warning')
+        return
+    
+    try:
+        add_log("Generating TTS audio (buffer)...")
+        tts_status_label.set_text("Generating...")
+        
+        provider = tts_provider_select.value
+        voice = tts_voice_select.value
+        speed = float(tts_speed_input.value or 1.0)
+        language = tts_language_select.value if tts_language_select.visible else None
+        
+        audio_bytes = await sdk.tts.speak(
+            text,
+            voice=voice,
+            speed=speed,
+            provider=provider,
+            language=language,
+            num_inference_steps=int(tts_quality_input.value or 10) if 'tts_quality_input' in globals() else None
+        )
+        
+        state.tts_audio_data = audio_bytes
+        tts_status_label.set_text(f"Generated {len(audio_bytes)} bytes")
+        add_log(f"TTS complete: {len(audio_bytes)} bytes", 'success')
+        
+        # Play audio in browser via base64
+        import base64
+        audio_b64 = base64.b64encode(audio_bytes).decode()
+        await ui.run_javascript(f'''
+            let audio = new Audio("data:audio/wav;base64,{audio_b64}");
+            audio.play();
+        ''')
+        
+    except Exception as e:
+        add_log(f"TTS speak error: {e}", 'error')
+        tts_status_label.set_text(f"Error: {str(e)[:50]}")
+
+async def tts_speak_stream():
+    text = tts_text_input.value.strip()
+    if not text:
+        ui.notify("Enter text to speak", type='warning')
+        return
+    
+    try:
+        add_log("Starting TTS streaming...")
+        tts_status_label.set_text("Streaming...")
+        
+        provider = tts_provider_select.value
+        voice = tts_voice_select.value
+        speed = float(tts_speed_input.value or 1.0)
+        language = tts_language_select.value if tts_language_select.visible else None
+        num_inference_steps = int(tts_quality_input.value or 10)
+        
+        all_audio = b''
+        chunk_count = 0
+        
+        async for chunk in sdk.tts.speak_stream(
+            text,
+            voice=voice,
+            speed=speed,
+            provider=provider,
+            language=language,
+            num_inference_steps=num_inference_steps
+        ):
+            chunk_count += 1
+            audio_bytes = chunk.get('audio', b'')
+            all_audio += audio_bytes
+            tts_status_label.set_text(f"Chunk {chunk.get('index', 0)+1}/{chunk.get('total', '?')} - {len(audio_bytes)} bytes")
+            add_log(f"Received chunk {chunk.get('index', 0)+1}/{chunk.get('total', '?')}", 'info')
+            
+            # Play each chunk immediately
+            import base64
+            audio_b64 = base64.b64encode(audio_bytes).decode()
+            mime = chunk.get('mimeType', 'audio/wav')
+            await ui.run_javascript(f'''
+                let audio = new Audio("data:{mime};base64,{audio_b64}");
+                audio.play();
+            ''')
+        
+        state.tts_audio_data = all_audio
+        add_log(f"Streaming complete: {chunk_count} chunks, {len(all_audio)} bytes total", 'success')
+        tts_status_label.set_text(f"Complete: {chunk_count} chunks")
+        
+    except Exception as e:
+        add_log(f"TTS stream error: {e}", 'error')
+        tts_status_label.set_text(f"Error: {str(e)[:50]}")
+
+async def tts_download():
+    if not state.tts_audio_data:
+        ui.notify("No audio to download", type='warning')
+        return
+    
+    import base64
+    audio_b64 = base64.b64encode(state.tts_audio_data).decode()
+    await ui.run_javascript(f'''
+        let link = document.createElement('a');
+        link.href = "data:audio/wav;base64,{audio_b64}";
+        link.download = "tts_audio.wav";
+        link.click();
+    ''')
+    add_log("Audio downloaded", 'success')
+
 # --- UI Layout ---
+
 
 @ui.page('/')
 async def main_page():
-    global log_area, activities_table, agent_select, ws_select, thread_select, prompt_input, raw_data_input, auto_run_switch, task_uuid_input, task_status_label
+    # Explicitly register with RealtimeX to trigger upfront permission prompt in Production mode
+    await sdk.register()
+
+    global log_area, activities_table, agent_select, ws_select, thread_select, prompt_input, raw_data_input, auto_run_switch, task_uuid_input, task_status_label, task_meta_area
     global chat_messages, chat_model_select, chat_stream_switch, chat_resp_area, embed_input, embed_res_area, providers_label
     global embed_store_texts, embed_store_doc_id, search_query, search_top_k, vector_res_area, vector_panels, embed_model_select
+    global tts_provider_select, tts_voice_select, tts_language_select, tts_text_input, tts_speed_input, tts_quality_input, tts_status_label
+    global status_card
+    global json_mode_switch, vector_workspace_id, search_doc_id
 
     ui.colors(primary='#3b82f6', secondary='#10b981', accent='#f59e0b')
+
+    @ui.refreshable
+    def status_card():
+        with ui.card().classes('w-full bg-blue-50 border-blue-100 p-4 mb-6'):
+            with ui.row().classes('w-full items-center justify-between'):
+                with ui.row().classes('items-center gap-3'):
+                    ui.icon('info', color='blue').classes('text-xl')
+                    ui.label('System Status').classes('font-bold text-blue-800')
+                ui.button('Refresh', icon='refresh', on_click=refresh_system_status).props('flat size=sm')
+            
+            with ui.row().classes('w-full gap-8 mt-2'):
+                with ui.column().classes('gap-0'):
+                    ui.label('App ID').classes('text-[10px] uppercase text-gray-400 font-bold')
+                    ui.label(state.ping_result.get('appId', 'Unknown')).classes('text-xs font-mono')
+                with ui.column().classes('gap-0'):
+                    ui.label('Mode').classes('text-[10px] uppercase text-gray-400 font-bold')
+                    ui.label(state.ping_result.get('mode', 'Unknown').upper()).classes('text-xs font-bold text-blue-600')
+                with ui.column().classes('gap-0'):
+                    ui.label('Port').classes('text-[10px] uppercase text-gray-400 font-bold')
+                    ui.label(str(sdk.port.get_port())).classes('text-xs font-mono')
+                with ui.column().classes('gap-0 flex-1'):
+                    ui.label('Storage Path').classes('text-[10px] uppercase text-gray-400 font-bold')
+                    ui.label(state.data_dir or 'Not loaded').classes('text-[10px] truncate max-w-xs')
     
     with ui.header().classes('items-center justify-between bg-white text-black border-b px-8 py-4'):
         with ui.row().classes('items-center gap-4'):
@@ -360,9 +627,12 @@ async def main_page():
         t1 = ui.tab('📋 Activities')
         t2 = ui.tab('🔗 API & Webhook')
         t3 = ui.tab('🤖 LLM & Vectors')
+        t4 = ui.tab('🔊 Text-to-Speech')
 
     with ui.row().classes('w-full no-wrap items-start gap-8 p-8'):
         with ui.column().classes('flex-1 min-w-0'):
+            # Insert Status Dashboard at the top
+            status_card()
             
             with ui.tab_panels(tabs, value=t3).classes('w-full bg-transparent'):
                 
@@ -409,12 +679,30 @@ async def main_page():
                             auto_run_switch = ui.switch('Auto-run (immediate)', value=True)
                             ui.button('TRIGGER AGENT', icon='bolt', on_click=trigger_agent).classes('flex-1 py-4').props('size=lg')
 
-                    with ui.card().classes('w-full'):
-                        ui.label('📊 Task Status').classes('text-md font-bold text-purple-600 mb-2')
-                        with ui.row().classes('w-full gap-2'):
-                            task_uuid_input = ui.input(label='Task UUID').classes('flex-1 font-mono')
-                            ui.button('Fetch', on_click=fetch_task_status).props('color=purple')
-                        task_status_label = ui.label('').classes('text-sm text-gray-500 mt-2')
+                    with ui.card().classes('w-full border-2 border-purple-200'):
+                        ui.label('📊 Task Status & Simulation').classes('text-md font-bold text-purple-600 mb-2')
+                        ui.label('Report task execution status back to RealtimeX platform.').classes('text-xs text-gray-500 mb-4')
+                        
+                        with ui.row().classes('w-full gap-4'):
+                            with ui.column().classes('flex-1'):
+                                ui.label('Current Task UUID').classes('text-[10px] uppercase font-bold text-gray-400')
+                                with ui.row().classes('w-full gap-2'):
+                                    task_uuid_input = ui.input(placeholder='Paste Task UUID...').classes('flex-1 font-mono')
+                                    ui.button(icon='refresh', on_click=fetch_task_status).props('flat')
+                                task_status_label = ui.label('No task selected').classes('text-xs text-gray-600 italic mt-1')
+                            
+                            with ui.column().classes('flex-1 border-l pl-4'):
+                                ui.label('Simulation Actions').classes('text-[10px] uppercase font-bold text-gray-400 mb-2')
+                                with ui.row().classes('w-full gap-2'):
+                                    ui.button('START', on_click=start_simulated_task).props('color=purple size=sm').classes('flex-1')
+                                    ui.button('COMPLETE', on_click=complete_simulated_task).props('color=green size=sm').classes('flex-1')
+                                    ui.button('FAIL', on_click=lambda: fail_simulated_task("Manual failure triggered by user")).props('color=red size=sm').classes('flex-1')
+                                
+                        with ui.expansion('Task Metadata (JSON)', icon='code').classes('w-full mt-4'):
+                            # NiceGUI's JsonEditor requires 'properties' as a required argument
+                            # We pass readOnly and initial empty content
+                            task_meta_area = ui.json_editor(properties={'content': {'json': {}}, 'readOnly': True}).classes('w-full h-40')
+                            # Update this in fetch_task_status
 
                 # --- TAB 3: LLM & VECTORS ---
                 with ui.tab_panel(t3).classes('p-0 space-y-6'):
@@ -464,6 +752,14 @@ async def main_page():
                                     embed_store_doc_id = ui.input(label='Namespace/Doc ID Filter').classes('flex-1')
                                     ui.button('Start Ingestion', icon='upload', on_click=embed_and_store).classes('px-8').props('color=orange')
                                 embed_store_texts = ui.textarea(label='Texts (one per line)', value='RealtimeX is a local AI platform.\nIt uses Local Apps for extensibility.\nSDK v1.1.0 supports vector RAG.').classes('w-full h-32')
+                                
+                                # Vector Registration - Moved inside Ingest panel
+                                with ui.expansion('Advanced: Vector Registration', icon='settings').classes('w-full mt-4'):
+                                    ui.label('Register a custom vector database (e.g., LanceDB) for this application.').classes('text-xs text-gray-500 mb-2')
+                                    with ui.row().classes('w-full gap-2'):
+                                        reg_provider = ui.input(label='Provider', value='lancedb').classes('flex-1')
+                                        reg_uri = ui.input(label='URI', value='./storage/my_vdb').classes('flex-1')
+                                        ui.button('Register', on_click=lambda: add_log(f"Registering {reg_provider.value}...")).props('outline')
 
                             with ui.tab_panel(vt1).classes('p-0 space-y-4'):
                                 with ui.card().classes('bg-blue-50 border-blue-100 p-4 w-full'):
@@ -481,31 +777,52 @@ async def main_page():
                                     embed_input = ui.input(label='Text to vectorstrip', value='Hello world').classes('flex-1')
                                     ui.button('EMBED', icon='auto_fix_high', on_click=generate_embedding).props('color=indigo px-8')
                                 embed_res_area = ui.markdown('').classes('w-full p-4 bg-slate-900 border-l-4 border-indigo-500 text-indigo-200 rounded text-xs hidden mt-4 font-mono')
+                            
 
                         vector_res_area = ui.markdown('').classes('w-full p-4 bg-slate-50 border-2 rounded text-sm hidden mt-6 max-h-80 overflow-auto')
 
-        # --- LOGS PANEL ---
+                # --- TAB 4: TTS ---
+                with ui.tab_panel(t4).classes('p-0 space-y-6'):
+                    with ui.row().classes('w-full gap-6'):
+                        # Config
+                        with ui.card().classes('flex-1'):
+                            ui.label('🔌 TTS Configuration').classes('text-md font-bold text-purple-600 mb-2')
+                            ui.button('Fetch TTS Providers', on_click=fetch_tts_providers).props('color=purple').classes('w-full')
+                            tts_provider_select = ui.select(
+                                label='Provider', 
+                                options={},
+                                on_change=lambda: update_tts_voices()
+                            ).classes('w-full')
+                            tts_voice_select = ui.select(label='Voice', options={}).classes('w-full')
+                            tts_language_select = ui.select(label='Language', options={}).classes('w-full hidden')
+                            with ui.row().classes('w-full gap-2'):
+                                tts_speed_input = ui.number(label='Speed', value=1.0, min=0.5, max=2.0, step=0.1).classes('flex-1')
+                                tts_quality_input = ui.number(label='Quality', value=10, min=1, max=20, step=1).classes('flex-1')
+
+                        # TTS Test
+                        with ui.card().classes('flex-1'):
+                            ui.label('🎤 Text-to-Speech Test').classes('text-md font-bold text-pink-600 mb-2')
+                            tts_text_input = ui.textarea(
+                                label='Text to speak',
+                                value='Hello! This is a test of the RealtimeX Text-to-Speech SDK integration. It supports multiple providers including local and cloud-based options.'
+                            ).classes('w-full')
+                            with ui.row().classes('w-full gap-2 mt-2'):
+                                ui.button('🔊 Speak (Buffer)', on_click=tts_speak).props('color=purple').classes('flex-1')
+                                ui.button('📡 Stream', on_click=tts_speak_stream).props('color=pink').classes('flex-1')
+                                ui.button('💾 Download', on_click=tts_download).props('outline').classes('w-24')
+                            tts_status_label = ui.label('Ready').classes('text-xs text-gray-500 mt-2')
+
+
         with ui.column().classes('w-80'):
             with ui.card().classes('w-full bg-slate-900 text-slate-100 sticky top-4'):
                 with ui.row().classes('w-full justify-between items-center mb-2'):
                     ui.label('SDK Output').classes('text-xs font-bold text-slate-400')
                     ui.button(icon='delete_sweep', on_click=lambda: (state.logs.clear(), log_area.set_content(""))).props('flat round size=xs color=slate-400')
-                log_area = ui.html('').classes('text-[10px] font-mono leading-tight whitespace-pre-wrap overflow-auto h-[70vh]')
+                log_area = ui.html('', sanitize=False).classes('text-[10px] font-mono leading-tight whitespace-pre-wrap overflow-auto h-[70vh]')
 
-    # Initial diagnostics
-    try:
-        res = await sdk.ping()
-        print(f"SDK Ping: {res}")
-        data_dir = await sdk.get_app_data_dir()
-        print(f"App Data Dir: {data_dir}")
-        add_log(f"Connected as: {res.get('appId')}")
-        add_log(f"Storage: {data_dir}")
-    except Exception as e:
-        print(f"SDK Init Error: {e}")
-        add_log(f"SDK Init Error: {e}", 'error')
-
-    # Initial load
+    # Initial diagnostics & load
     await asyncio.gather(
+        refresh_system_status(),
         refresh_activities(), 
         fetch_agents(), 
         fetch_workspaces(),

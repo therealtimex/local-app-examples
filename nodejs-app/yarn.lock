@@ -184,10 +184,10 @@
     "@nodelib/fs.scandir" "2.1.5"
     fastq "^1.6.0"
 
-"@realtimex/sdk@^1.1.4":
-  version "1.1.4"
-  resolved "https://registry.yarnpkg.com/@realtimex/sdk/-/sdk-1.1.4.tgz#f63871494122d6baf2b0e8fcd01b44c238158370"
-  integrity sha512-GmBwswSL8kBmHeqVdv4PK6EmkbjMb3UjBgYK00Z2+xUrTzk6URYOxIAa9oA58Z6q8GRPvFbtZxhH0r1v+0JG/w==
+"@realtimex/sdk@^1.2.2":
+  version "1.2.2"
+  resolved "https://registry.yarnpkg.com/@realtimex/sdk/-/sdk-1.2.2.tgz#31dc4b75b62e08110413594512d7fbbd9af9a8b8"
+  integrity sha512-f1++lux7cGZTrxj/pxnIucg07mwwqI6rmkr7j411ZsBv2hwI1SV8aTxMEhlAILEUfYMq0joarUL9qcqhMuiwfw==
 
 "@types/body-parser@*":
   version "1.19.6"
