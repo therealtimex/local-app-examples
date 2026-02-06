@@ -18,6 +18,7 @@ import { createApiRoutes } from './routes/api';
 import { createWebhookRoutes } from './routes/webhook';
 import { createLLMRoutes } from './routes/llm';
 import { createTTSRoutes } from './routes/tts';
+import { createSTTRoutes } from './routes/stt';
 
 const app = express();
 
@@ -46,6 +47,8 @@ const sdk = new RealtimeXSDK({
         'vectors.write',
         // TTS
         'tts.generate',
+        // STT
+        'stt.listen',
     ],
 });
 
@@ -74,6 +77,9 @@ const startServer = async () => {
 
     // TTS: /api/tts/*
     app.use('/api/tts', createTTSRoutes(sdk));
+
+    // STT: /api/stt/*
+    app.use('/api/stt', createSTTRoutes(sdk));
 
     // ========================
     // Health Check
