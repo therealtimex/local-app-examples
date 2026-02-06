@@ -30,5 +30,17 @@ export const createSTTRoutes = (sdk: RealtimeXSDK) => {
         }
     });
 
+    // GET /api/stt/models
+    // List available models via SDK
+    router.get('/models', async (req, res) => {
+        try {
+            const result = await sdk.stt.models();
+            res.json({ success: true, models: result });
+        } catch (error: any) {
+            console.error('[STT] Models Error:', error.message);
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
     return router;
 };

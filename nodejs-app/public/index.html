@@ -548,10 +548,13 @@ SDK v1.1.0 supports vector RAG.</textarea>
                                 </select>
                             </div>
                             <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Model ID
-                                    (Optional)</label>
-                                <input id="stt-model" type="text" placeholder="e.g., onnx-community/whisper-tiny.en"
-                                    class="w-full px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Model ID</label>
+                                <select id="stt-model"
+                                    class="w-full px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                                    <option value="">Select a model...</option>
+                                </select>
+                                <button id="stt-refresh-models-btn" onclick="fetchSTTModels()"
+                                    class="text-xs text-blue-600 hover:text-blue-800 underline">Refresh Models</button>
                             </div>
                         </div>
 
@@ -888,6 +891,69 @@ SDK v1.1.0 supports vector RAG.</textarea>
                 addLog(`STT Error: ${error.message}`, 'error');
             }
         }
+
+        async function fetchSTTModels() {
+            const select = document.getElementById('stt-model');
+            select.innerHTML = '<option>Loading...</option>';
+            select.disabled = true;
+
+            try {
+                addLog('Fetching STT models...');
+                // Direct call to Node.js app wrapper route
+                const result = await api('GET', '/api/stt/models');
+
+                select.innerHTML = '';
+                select.disabled = false;
+
+                if (result.success && Array.isArray(result.models)) {
+                    let totalModels = result.models.length;
+
+                    // Group by provider for UI display
+                    const modelsByProvider = {};
+                    result.models.forEach(m => {
+                        if (!modelsByProvider[m.provider]) {
+                            modelsByProvider[m.provider] = [];
+                        }
+                        modelsByProvider[m.provider].push(m);
+                    });
+
+                    Object.keys(modelsByProvider).forEach(provider => {
+                        const models = modelsByProvider[provider];
+                        if (models.length > 0) {
+                            const optgroup = document.createElement('optgroup');
+                            // Capitalize provider name
+                            optgroup.label = provider ? (provider.charAt(0).toUpperCase() + provider.slice(1)) : 'Other';
+
+                            models.forEach(m => {
+                                const opt = document.createElement('option');
+                                opt.value = m.id;
+                                opt.text = m.name;
+                                if (m.recommended) opt.selected = true;
+                                optgroup.appendChild(opt);
+                            });
+                            select.appendChild(optgroup);
+                        }
+                    });
+
+                    addLog(`Loaded ${totalModels} models from ${Object.keys(modelsByProvider).length} providers.`);
+
+                    // Select first if none recommended
+                    if (select.selectedIndex === -1 && select.options.length > 0) {
+                        select.options[0].selected = true;
+                    }
+                } else {
+                    throw new Error(result.error || 'Failed to load models or invalid format');
+                }
+            } catch (e) {
+                console.error(e);
+                select.innerHTML = '<option value="">Failed to load</option>';
+                addLog(`Error fetching models: ${e.message}`, 'error');
+            }
+        }
+
+        // Load models initially? Or when tab is switched?
+        // Let's load on init for simplicity
+        setTimeout(fetchSTTModels, 1000);
 
         // ==================== LLM: CHAT ====================
         async function sendChat() {
