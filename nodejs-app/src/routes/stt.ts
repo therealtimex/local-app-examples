@@ -5,7 +5,7 @@ import { RealtimeXSDK } from '@realtimex/sdk';
 export const createSTTRoutes = (sdk: RealtimeXSDK) => {
     const router = Router();
 
-    // GET /api/stt/listen
+    // POST /api/stt/listen
     // Listen to microphone and transcribe (frontend trigger via SDK)
     router.post('/listen', async (req, res) => {
         try {
