@@ -76,6 +76,9 @@
             <button onclick="switchTab('tts')" class="tab-btn px-4 py-4 text-sm" data-tab="tts">
                 🔊 TTS
             </button>
+            <button onclick="switchTab('stt')" class="tab-btn px-4 py-4 text-sm" data-tab="stt">
+                🎤 STT
+            </button>
         </div>
     </nav>
 
@@ -529,6 +532,44 @@ SDK v1.1.0 supports vector RAG.</textarea>
                     </div>
                 </div>
             </div>
+            <!-- ==================== STT TAB ==================== -->
+            <div id="tab-stt" class="tab-content space-y-6">
+                <div class="bg-white rounded-xl shadow-sm border p-6">
+                    <h2 class="text-lg font-bold text-blue-600 mb-4">🎤 Speech-to-Text Demo</h2>
+
+                    <div class="space-y-4">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Provider</label>
+                                <select id="stt-provider"
+                                    class="w-full px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    <option value="native">Native (Electron)</option>
+                                    <option value="whisper">Whisper (Browser - Transformers.js)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Model ID</label>
+                                <select id="stt-model"
+                                    class="w-full px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                                    <option value="">Select a model...</option>
+                                </select>
+                                <button id="stt-refresh-models-btn" onclick="fetchSTTModels()"
+                                    class="text-xs text-blue-600 hover:text-blue-800 underline">Refresh Models</button>
+                            </div>
+                        </div>
+
+                        <button id="stt-listen-btn" onclick="startSTTListening()"
+                            class="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2">
+                            🎤 Start Listening
+                        </button>
+
+                        <div id="stt-status"
+                            class="mt-6 p-4 rounded-lg bg-gray-50 min-h-[100px] border border-gray-200 flex items-center justify-center">
+                            <p class="text-gray-400 text-sm italic">Transcript will appear here...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- RIGHT: Logs Panel -->
@@ -796,6 +837,123 @@ SDK v1.1.0 supports vector RAG.</textarea>
             }
         }
 
+        // ==================== STT ====================
+        async function startSTTListening() {
+            const btn = document.getElementById('stt-listen-btn');
+            const statusDiv = document.getElementById('stt-status');
+            const provider = document.getElementById('stt-provider').value;
+            const model = document.getElementById('stt-model').value || undefined;
+
+            // Reset UI
+            btn.disabled = true;
+            btn.innerHTML = `<span class="animate-pulse">Listening...</span>`;
+            btn.classList.replace('bg-blue-600', 'bg-red-600');
+            btn.classList.replace('hover:bg-blue-500', 'hover:bg-red-500');
+
+            statusDiv.innerHTML = `<div class="flex flex-col items-center justify-center gap-2">
+                <div class="w-full max-w-[200px] h-1 bg-gray-200 rounded-full overflow-hidden">
+                    <div class="h-full bg-blue-500 animate-[progress_1.5s_infinite_linear]" style="width: 50%"></div>
+                </div>
+                <p class="text-gray-500 text-xs">Speak now...</p>
+            </div>`;
+
+            addLog(`Starting STT (${provider})...`);
+
+            try {
+                const result = await api('POST', '/api/stt/listen', {
+                    provider,
+                    model,
+                    timeout: 60000 // 60s timeout for browser models
+                });
+
+                btn.disabled = false;
+                btn.innerHTML = '🎤 Start Listening';
+                btn.classList.replace('bg-red-600', 'bg-blue-600');
+                btn.classList.replace('hover:bg-red-500', 'hover:bg-blue-500');
+
+                if (result.success) {
+                    statusDiv.innerHTML = `<p class="text-gray-800 font-medium leading-relaxed">"${result.text}"</p>`;
+                    addLog(`Transcript: "${result.text}"`, 'success');
+                } else {
+                    throw new Error(result.error || 'Unknown error');
+                }
+
+            } catch (error) {
+                console.error(error);
+                btn.disabled = false;
+                btn.innerHTML = 'Retry Listening';
+                btn.classList.replace('bg-red-600', 'bg-blue-600');
+                btn.classList.replace('hover:bg-red-500', 'hover:bg-blue-500');
+
+                statusDiv.innerHTML = `<div class="text-red-500 text-sm text-center">
+                    <strong>Error:</strong><br>${error.message}
+                </div>`;
+                addLog(`STT Error: ${error.message}`, 'error');
+            }
+        }
+
+        async function fetchSTTModels() {
+            const select = document.getElementById('stt-model');
+            select.innerHTML = '<option>Loading...</option>';
+            select.disabled = true;
+
+            try {
+                addLog('Fetching STT models...');
+                // Direct call to Node.js app wrapper route
+                const result = await api('GET', '/api/stt/models');
+
+                select.innerHTML = '';
+                select.disabled = false;
+
+                if (result.success && Array.isArray(result.models)) {
+                    let totalModels = result.models.length;
+
+                    // Group by provider for UI display
+                    const modelsByProvider = {};
+                    result.models.forEach(m => {
+                        if (!modelsByProvider[m.provider]) {
+                            modelsByProvider[m.provider] = [];
+                        }
+                        modelsByProvider[m.provider].push(m);
+                    });
+
+                    Object.keys(modelsByProvider).forEach(provider => {
+                        const models = modelsByProvider[provider];
+                        if (models.length > 0) {
+                            const optgroup = document.createElement('optgroup');
+                            // Capitalize provider name
+                            optgroup.label = provider ? (provider.charAt(0).toUpperCase() + provider.slice(1)) : 'Other';
+
+                            models.forEach(m => {
+                                const opt = document.createElement('option');
+                                opt.value = m.id;
+                                opt.text = m.name;
+                                if (m.recommended) opt.selected = true;
+                                optgroup.appendChild(opt);
+                            });
+                            select.appendChild(optgroup);
+                        }
+                    });
+
+                    addLog(`Loaded ${totalModels} models from ${Object.keys(modelsByProvider).length} providers.`);
+
+                    // Select first if none recommended
+                    if (select.selectedIndex === -1 && select.options.length > 0) {
+                        select.options[0].selected = true;
+                    }
+                } else {
+                    throw new Error(result.error || 'Failed to load models or invalid format');
+                }
+            } catch (e) {
+                console.error(e);
+                select.innerHTML = '<option value="">Failed to load</option>';
+                addLog(`Error fetching models: ${e.message}`, 'error');
+            }
+        }
+
+        // Load models initially? Or when tab is switched?
+        // Let's load on init for simplicity
+        setTimeout(fetchSTTModels, 1000);
 
         // ==================== LLM: CHAT ====================
         async function sendChat() {
