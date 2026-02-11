@@ -27,7 +27,9 @@ sdk = RealtimeXSDK(config=SDKConfig(
         'vectors.read',
         'vectors.write',
         # TTS
-        'tts.generate'
+        'tts.generate',
+        # STT
+        'stt.listen'
     ]
 ))
 
@@ -43,6 +45,7 @@ class State:
     embed_model: str = ""
     tts_providers: List[Dict[str, Any]] = []
     tts_audio_data: bytes = b''
+    stt_providers: List[Dict[str, Any]] = []
     # Task Simulation
     simulated_task_uuid: str = ""
     simulated_task_status: str = "idle"  # idle, processing, completed, failed
@@ -570,6 +573,67 @@ async def tts_download():
     ''')
     add_log("Audio downloaded", 'success')
 
+# --- STT Actions ---
+
+async def fetch_stt_providers():
+    try:
+        add_log("Fetching STT providers...")
+        res = await sdk.stt.list_providers()
+        state.stt_providers = res.get('providers', [])
+        
+        # Build options
+        p_opts = {p['id']: p['name'] for p in state.stt_providers}
+        stt_provider_select.options = p_opts
+        
+        # Default to first if available
+        if p_opts:
+            stt_provider_select.value = list(p_opts.keys())[0]
+            
+        stt_provider_select.update()
+        update_stt_models()
+        
+        add_log(f"Loaded {len(state.stt_providers)} STT providers", 'success')
+    except Exception as e:
+         add_log(f"STT providers error: {e}", 'error')
+
+def update_stt_models():
+    p_id = stt_provider_select.value
+    if not p_id: 
+        stt_model_select.options = {}
+        stt_model_select.update()
+        return
+    
+    provider = next((p for p in state.stt_providers if p['id'] == p_id), None)
+    if not provider: return
+    
+    m_opts = {m['id']: m['name'] for m in provider.get('models', [])}
+    stt_model_select.options = m_opts
+    if m_opts:
+        stt_model_select.value = list(m_opts.keys())[0]
+    stt_model_select.update()
+
+async def stt_listen():
+    try:
+        stt_status_label.set_text("Listening...")
+        
+        res = await sdk.stt.listen(options={
+            "provider": stt_provider_select.value,
+            "model": stt_model_select.value
+        })
+        
+        if res.get('success'):
+            text = res.get('text', '')
+            stt_status_label.set_text(f'"{text}"')
+            add_log(f"STT: {text}", 'success')
+        else:
+            err = res.get('error', 'Unknown error')
+            stt_status_label.set_text(f"Error: {err}")
+            add_log(f"STT Error: {err}", 'error')
+            
+    except Exception as e:
+        add_log(f"STT exception: {e}", 'error')
+        stt_status_label.set_text("Error")
+
 # --- UI Layout ---
 
 
@@ -582,6 +646,7 @@ async def main_page():
     global chat_messages, chat_model_select, chat_stream_switch, chat_resp_area, embed_input, embed_res_area, providers_label
     global embed_store_texts, embed_store_doc_id, search_query, search_top_k, vector_res_area, vector_panels, embed_model_select
     global tts_provider_select, tts_voice_select, tts_language_select, tts_text_input, tts_speed_input, tts_quality_input, tts_status_label
+    global stt_provider_select, stt_model_select, stt_status_label
     global status_card
     global json_mode_switch, vector_workspace_id, search_doc_id
 
@@ -628,6 +693,7 @@ async def main_page():
         t2 = ui.tab('🔗 API & Webhook')
         t3 = ui.tab('🤖 LLM & Vectors')
         t4 = ui.tab('🔊 Text-to-Speech')
+        t5 = ui.tab('🎤 Speech-to-Text')
 
     with ui.row().classes('w-full no-wrap items-start gap-8 p-8'):
         with ui.column().classes('flex-1 min-w-0'):
@@ -811,6 +877,26 @@ async def main_page():
                                 ui.button('📡 Stream', on_click=tts_speak_stream).props('color=pink').classes('flex-1')
                                 ui.button('💾 Download', on_click=tts_download).props('outline').classes('w-24')
                             tts_status_label = ui.label('Ready').classes('text-xs text-gray-500 mt-2')
+
+                # --- TAB 5: STT ---
+                with ui.tab_panel(t5).classes('p-0 space-y-6'):
+                    with ui.row().classes('w-full gap-6'):
+                        with ui.card().classes('flex-1'):
+                            ui.label('🎤 STT Configuration').classes('text-md font-bold text-blue-600 mb-2')
+                            ui.button('Fetch STT Providers', on_click=fetch_stt_providers).props('color=blue').classes('w-full')
+                            
+                            stt_provider_select = ui.select(
+                                label='Provider', 
+                                options={}, 
+                                on_change=update_stt_models
+                            ).classes('w-full')
+                            
+                            stt_model_select = ui.select(label='Model', options={}).classes('w-full')
+                            
+                        with ui.card().classes('flex-1'):
+                            ui.label('Tests').classes('text-md font-bold text-blue-600 mb-2')
+                            ui.button('🎤 Start Listening', on_click=stt_listen).props('color=red size=lg').classes('w-full h-16')
+                            stt_status_label = ui.label('Ready to listen').classes('text-md text-gray-500 mt-4 text-center w-full block')
 
 
         with ui.column().classes('w-80'):
