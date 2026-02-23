@@ -19,6 +19,7 @@ import { createWebhookRoutes } from './routes/webhook';
 import { createLLMRoutes } from './routes/llm';
 import { createTTSRoutes } from './routes/tts';
 import { createSTTRoutes } from './routes/stt';
+import { createAgentRoutes } from './routes/agent';
 
 const app = express();
 
@@ -48,7 +49,10 @@ const sdk = new RealtimeXSDK({
         // TTS
         'tts.generate',
         // STT
+        // STT
         'stt.listen',
+        // Agent
+        'agent.chat',
     ],
 });
 
@@ -81,6 +85,9 @@ const startServer = async () => {
     // STT: /api/stt/*
     app.use('/api/stt', createSTTRoutes(sdk));
 
+    // Agent: /api/agent/*
+    app.use('/api/agent', createAgentRoutes(sdk));
+
     // ========================
     // Health Check
     app.get('/health', (req, res) => {
@@ -101,10 +108,15 @@ const startServer = async () => {
     const dataDir = await sdk.getAppDataDir();
     console.log(dataDir);
     // Start server
-    app.listen(PORT, () => {
+    app.listen(PORT, async () => {
         console.log(`\n🚀 RealtimeX Node.js Demo running at http://localhost:${PORT}`);
         console.log(`   App ID: ${process.env.RTX_APP_ID || 'Not set'}`);
-        console.log(`   App Name: ${process.env.RTX_APP_NAME || 'Not set'}\n`);
+        try {
+            const dataDir = await sdk.getAppDataDir();
+            console.log(`   SDK Connected: Yes (Data Dir: ${dataDir})`);
+        } catch (e: any) {
+            console.log(`   SDK Connected: Failed (${e.message})`);
+        }
         console.log('📚 Available endpoints:');
         console.log('   Activities:  GET/POST/PATCH/DELETE /api/activities');
         console.log('   Agents:      GET /api/agents');
@@ -120,6 +132,9 @@ const startServer = async () => {
         console.log('   RAG Search:  POST /api/llm/search');
         console.log('   TTS:         GET  /api/tts/providers');
         console.log('   TTS:         POST /api/tts/speak');
+        console.log('   Agent Chat:  POST /api/agent/chat');
+        console.log('   Agent Sess:  POST /api/agent/session');
+        console.log('   Agent Stream:GET  /api/agent/stream');
     });
 };
 
