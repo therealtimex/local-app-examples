@@ -79,6 +79,9 @@
             <button onclick="switchTab('stt')" class="tab-btn px-4 py-4 text-sm" data-tab="stt">
                 🎤 STT
             </button>
+            <button onclick="switchTab('agent')" class="tab-btn px-4 py-4 text-sm" data-tab="agent">
+                💬 Agent Chat
+            </button>
         </div>
     </nav>
 
@@ -570,6 +573,71 @@ SDK v1.1.0 supports vector RAG.</textarea>
                     </div>
                 </div>
             </div>
+
+            <!-- ==================== AGENT TAB ==================== -->
+            <div id="tab-agent" class="tab-content space-y-6">
+                <div class="bg-white rounded-xl shadow-sm border p-6">
+                    <h2 class="text-lg font-bold text-indigo-600 mb-4">💬 Agent Chat</h2>
+
+                    <!-- Session Controls -->
+                    <div class="mb-4 bg-gray-50 p-4 rounded-lg space-y-3">
+                        <div class="flex items-center justify-between">
+                            <div id="agent-session-info" class="text-sm text-gray-600">
+                                Status: <span class="font-bold text-gray-400">No Active Session</span>
+                            </div>
+                            <div class="flex gap-2">
+                                <button onclick="createAgentSession()" id="btn-create-session"
+                                    class="px-4 py-2 bg-green-500 text-white rounded-lg text-xs font-bold hover:bg-green-600 transition-colors">▶
+                                    Start Session</button>
+                                <button onclick="closeAgentSession()" id="btn-close-session"
+                                    class="hidden px-4 py-2 bg-red-500 text-white rounded-lg text-xs font-bold hover:bg-red-600 transition-colors">■
+                                    End Session</button>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-4">
+                            <!-- Workspace Selection -->
+                            <div class="flex items-center gap-2 flex-1">
+                                <label class="text-xs text-gray-500 font-bold whitespace-nowrap">Workspace:</label>
+                                <select id="agent-workspace-select"
+                                    class="text-xs border rounded-lg px-3 py-1.5 w-full focus:ring-2 focus:ring-indigo-500 bg-white">
+                                    <option value="">(Auto-select first)</option>
+                                </select>
+                            </div>
+                            <!-- Agent Selection -->
+                            <div id="agent-selection-container" class="flex items-center gap-2 flex-1">
+                                <label class="text-xs text-gray-500 font-bold whitespace-nowrap">Agent:</label>
+                                <select id="agent-name-select"
+                                    class="text-xs border rounded-lg px-3 py-1.5 w-full focus:ring-2 focus:ring-indigo-500 bg-white">
+                                    <option value="@agent">@agent (Default)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Chat Area -->
+                    <div id="agent-chat-history"
+                        class="h-96 overflow-y-auto border rounded-lg p-4 mb-4 bg-gray-50 space-y-3">
+                        <div class="text-center text-gray-400 text-xs italic mt-4">Start a session to chat with the
+                            agent...</div>
+                    </div>
+
+                    <!-- Input Area -->
+                    <div class="flex gap-2 items-end">
+                        <textarea id="agent-chat-input" rows="2"
+                            class="flex-1 px-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 resize-none"
+                            placeholder="Type your message... (Enter to send, Shift+Enter for newline)"
+                            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAgentMessage()}"></textarea>
+                        <div class="flex flex-col gap-1">
+                            <button onclick="sendAgentMessage()"
+                                class="px-6 py-3 bg-indigo-600 text-white rounded-lg font-bold text-sm hover:bg-indigo-700 transition-colors">Send</button>
+                            <label class="flex items-center gap-1 cursor-pointer">
+                                <input type="checkbox" id="agent-stream-toggle" class="w-3 h-3 text-indigo-600" checked>
+                                <span class="text-[10px] text-gray-500">Stream</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- RIGHT: Logs Panel -->
@@ -590,6 +658,7 @@ SDK v1.1.0 supports vector RAG.</textarea>
         // ==================== STATE ====================
         let selectedActivity = null;
         let activities = [];
+        let currentAgentSessionId = null;
 
         // ==================== TAB SWITCHING ====================
         function switchTab(tabId) {
@@ -727,6 +796,7 @@ SDK v1.1.0 supports vector RAG.</textarea>
             select.innerHTML = '<option value="">Select a workspace...</option>' +
                 workspaces.map(w => `<option value="${w.slug}">${w.name}</option>`).join('');
             addLog(`Loaded ${workspaces.length} workspaces`, 'success');
+            return workspaces; // Return workspaces for agent tab
         }
 
         async function fetchThreads() {
@@ -1593,10 +1663,500 @@ SDK v1.1.0 supports vector RAG.</textarea>
             addLog('Downloaded audio file', 'success');
         }
 
+        // ==================== AGENT CHAT ====================
+        async function loadAgentList() {
+            try {
+                const data = await api('GET', '/api/agents');
+                const agents = data.agents || [];
+                const select = document.getElementById('agent-name-select');
+                select.innerHTML = '<option value="@agent">@agent (Default)</option>';
+                agents.forEach(a => {
+                    const opt = document.createElement('option');
+                    opt.value = `@${a.name || a.slug}`;
+                    opt.textContent = `@${a.name || a.slug}`;
+                    select.appendChild(opt);
+                });
+                addLog(`Loaded ${agents.length} agents for chat`, 'success');
+            } catch (e) {
+                addLog(`Could not load agents: ${e.message}`);
+            }
+        }
+
+        async function createAgentSession() {
+            addLog('Creating agent session...');
+            const agentName = document.getElementById('agent-name-select').value || '@agent';
+            const workspaceSlug = document.getElementById('agent-workspace-select').value;
+
+            try {
+                const session = await api('POST', '/api/agent/session', {
+                    agent_name: agentName,
+                    workspace_slug: workspaceSlug || undefined
+                });
+                currentAgentSessionId = session.session_id;
+
+                document.getElementById('agent-session-info').innerHTML = `
+                    <span class="inline-flex items-center gap-1.5">
+                        <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                        <span class="font-mono font-bold text-xs">${currentAgentSessionId.slice(0, 8)}...</span>
+                        <span class="text-indigo-600 font-bold">${session.agent.name}</span>
+                        <span class="text-gray-400">in</span>
+                        <span class="text-indigo-600 font-bold">${session.workspace.name}</span>
+                    </span>`;
+                document.getElementById('btn-create-session').classList.add('hidden');
+                document.getElementById('btn-close-session').classList.remove('hidden');
+                document.getElementById('agent-selection-container').classList.add('opacity-50', 'pointer-events-none');
+                document.getElementById('agent-workspace-select').closest('.flex.items-center').classList.add('opacity-50', 'pointer-events-none');
+                document.getElementById('agent-chat-history').innerHTML = `<div class="text-center text-gray-400 text-xs italic mt-4">Session started with <strong>${session.agent.name}</strong> in <strong>${session.workspace.name}</strong>. Say hello!</div>`;
+
+                addLog(`Session created: ${currentAgentSessionId} (agent: ${session.agent.name}, workspace: ${session.workspace.name})`, 'success');
+            } catch (e) {
+                addLog(`Error creating session: ${e.message}`, 'error');
+            }
+        }
+
+        async function closeAgentSession() {
+            if (!currentAgentSessionId) return;
+            addLog('Closing session...');
+            try {
+                await api('DELETE', `/api/agent/session/${currentAgentSessionId}`);
+                currentAgentSessionId = null;
+
+                document.getElementById('agent-session-info').innerHTML = 'Status: <span class="font-bold text-gray-400">No Active Session</span>';
+                document.getElementById('btn-create-session').classList.remove('hidden');
+                document.getElementById('btn-close-session').classList.add('hidden');
+                document.getElementById('agent-selection-container').classList.remove('opacity-50', 'pointer-events-none');
+                document.getElementById('agent-workspace-select').closest('.flex.items-center').classList.remove('opacity-50', 'pointer-events-none');
+                appendAgentMessage('system', 'Session ended.');
+
+                addLog('Session closed', 'success');
+            } catch (e) {
+                addLog(`Error closing session: ${e.message}`, 'error');
+            }
+        }
+
+        // ==================== UI HELPERS ====================
+        window.toggleToolOutput = function (btn) {
+            const container = btn.closest('.tool-use-block');
+            const content = container.querySelector('.tool-output-content');
+            if (!content) return;
+            const isHidden = content.classList.contains('hidden');
+
+            if (isHidden) {
+                content.classList.remove('hidden');
+                btn.textContent = 'Hide Output';
+                btn.classList.add('bg-blue-100', 'text-blue-700');
+            } else {
+                content.classList.add('hidden');
+                btn.textContent = 'View Output';
+                btn.classList.remove('bg-blue-100', 'text-blue-700');
+            }
+        };
+
+        window.switchToolTab = function (btn, tab) {
+            const container = btn.closest('.tool-use-block');
+            const inputContent = container.querySelector('.tab-content-input');
+            const outputContent = container.querySelector('.tab-content-output');
+            const inputBtn = container.querySelector('.tab-btn-input');
+            const outputBtn = container.querySelector('.tab-btn-output');
+
+            if (tab === 'input') {
+                inputContent.classList.remove('hidden');
+                outputContent.classList.add('hidden');
+
+                inputBtn.classList.add('bg-white', 'text-blue-600', 'border-r');
+                inputBtn.classList.remove('bg-gray-50', 'text-gray-500');
+
+                outputBtn.classList.remove('bg-white', 'text-blue-600');
+                outputBtn.classList.add('bg-gray-50', 'text-gray-500');
+            } else {
+                inputContent.classList.add('hidden');
+                outputContent.classList.remove('hidden');
+
+                outputBtn.classList.add('bg-white', 'text-blue-600');
+                outputBtn.classList.remove('bg-gray-50', 'text-gray-500');
+
+                inputBtn.classList.remove('bg-white', 'text-blue-600', 'border-r');
+                inputBtn.classList.add('bg-gray-50', 'text-gray-500');
+            }
+        };
+
+        // ==================== BLOCK RENDERER ====================
+        function renderBlock(block) {
+            if (!block || !block.dataType) return '';
+            const { dataType, data } = block;
+            const content = data?.content;
+
+            const boxClass = "my-2 p-3 rounded-md border text-sm overflow-hidden";
+
+            try {
+                switch (dataType) {
+                    case 'text':
+                    case 'markdown':
+                        // Basic text rendering
+                        return `<div class="whitespace-pre-wrap font-medium text-gray-800">${(content || '')}</div>`;
+
+                    case 'html':
+                        return `<div class="${boxClass} bg-white border-l-4 border-l-blue-500 shadow-sm">${content}</div>`;
+
+                    case 'code':
+                        const lang = data.language || 'text';
+                        return `<div class="${boxClass} bg-gray-900 text-gray-100 font-mono text-xs overflow-x-auto">
+                                    <div class="text-[10px] text-gray-500 uppercase mb-1 select-none">${lang}</div>
+                                    <pre>${content}</pre>
+                                </div>`;
+
+                    case 'image':
+                        const images = Array.isArray(content) ? content : [content];
+                        return `<div class="flex gap-2 overflow-x-auto my-2">
+                                    ${images.map(img => `<img src="${img.url}" alt="${img.alt || ''}" class="rounded-lg max-h-64 object-cover border shadow-sm"/>`).join('')}
+                                </div>`;
+
+                    case 'files':
+                        const fileList = Array.isArray(content) ? content : [content];
+                        return `<div class="grid grid-cols-1 sm:grid-cols-2 gap-2 my-2">
+                            ${fileList.map(f => {
+                            const ext = (f.name || '').split('.').pop();
+                            const isImg = ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext.toLowerCase());
+                            return `
+                                <div class="border rounded-lg p-2 flex items-center gap-3 bg-gray-50 hover:bg-white transition-colors group">
+                                    <div class="w-10 h-10 flex-shrink-0 bg-gray-200 rounded flex items-center justify-center overflow-hidden">
+                                        ${isImg && f.url ? `<img src="${f.url}" class="w-full h-full object-cover">` : `<span class="text-xs font-bold text-gray-500 uppercase">${ext}</span>`}
+                                    </div>
+                                    <div class="min-w-0 flex-1">
+                                        <div class="text-xs font-medium text-gray-700 truncate" title="${f.name}">${f.name || 'Untitled'}</div>
+                                        <div class="text-[10px] text-gray-400">${f.size ? (f.size / 1024).toFixed(1) + ' KB' : ''}</div>
+                                    </div>
+                                    ${f.url ? `<a href="${f.url}" target="_blank" download="${f.name}" class="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors" title="Download">⬇️</a>` : ''}
+                                </div>`;
+                        }).join('')}
+                        </div>`;
+
+                    case 'toolUse':
+                        const toolStatus = data.meta?.status || 'processing';
+                        const inputJson = data.input ? JSON.stringify(data.input, null, 2) : '{}';
+                        const outputDisplay = typeof data.content === 'object' ? JSON.stringify(data.content, null, 2) : (data.content || 'No output');
+
+                        return `
+                        <div class="my-3 border rounded-lg overflow-hidden bg-white shadow-sm tool-use-block transition-all">
+                            <!-- Header -->
+                            <div class="flex items-center justify-between px-3 py-2 bg-gray-50 border-b">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-6 h-6 rounded bg-white border shadow-sm flex items-center justify-center text-xs">
+                                        🛠️
+                                    </div>
+                                    <div>
+                                        <div class="font-bold text-xs text-gray-700">${data.toolName}</div>
+                                        <div class="text-[10px] text-gray-500 max-w-[200px] truncate">${data.mainTask || 'Using tool...'}</div>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-gray-200 text-gray-600">${toolStatus}</span>
+                                    <button onclick="toggleToolOutput(this)" class="px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded transition-colors border border-transparent hover:border-blue-100">
+                                        View Output
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <!-- Content -->
+                            <div class="hidden border-t tool-output-content">
+                                <div class="flex border-b bg-gray-50">
+                                    <button class="flex-1 py-1.5 text-xs font-medium text-center text-blue-600 bg-white border-r tab-btn-input" onclick="switchToolTab(this, 'input')">Input</button>
+                                    <button class="flex-1 py-1.5 text-xs font-medium text-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 tab-btn-output" onclick="switchToolTab(this, 'output')">Output</button>
+                                </div>
+                                
+                                <div class="p-3 bg-gray-50 text-xs font-mono overflow-auto max-h-60 tab-content-input">
+                                    <div class="font-bold text-gray-400 mb-1 select-none">INPUT PARAMETERS</div>
+                                    <pre>${inputJson}</pre>
+                                </div>
+                                
+                                <div class="hidden p-3 bg-white text-xs font-mono overflow-auto max-h-60 tab-content-output">
+                                    <div class="font-bold text-gray-400 mb-1 select-none">TOOL OUTPUT</div>
+                                    <pre class="whitespace-pre-wrap">${outputDisplay}</pre>
+                                </div>
+                            </div>
+                        </div>
+                        `;
+
+                    case 'json':
+                        return `<div class="${boxClass} bg-gray-50 font-mono text-xs text-green-700">
+                                    <div class="font-bold text-gray-400 mb-1">JSON</div>
+                                    <pre class="overflow-auto max-h-60">${JSON.stringify(content, null, 2)}</pre>
+                                </div>`;
+
+                    case 'search':
+                        if (!content?.results) return renderDefault(dataType, data);
+                        return `<div class="${boxClass} bg-white border-blue-200">
+                                    <div class="text-xs font-bold text-blue-500 uppercase mb-2">🔍 Search Results: "${content.query}"</div>
+                                    <div class="space-y-3">
+                                        ${content.results.map(r => `
+                                            <div>
+                                                <a href="${r.url}" target="_blank" class="text-blue-600 font-bold hover:underline block truncate">${r.title}</a>
+                                                <p class="text-xs text-gray-600 line-clamp-2">${r.snippet}</p>
+                                                <div class="flex items-center gap-1 mt-1 text-[10px] text-gray-400">
+                                                    ${r.icon ? `<img src="${r.icon}" class="w-3 h-3"/>` : ''}
+                                                    <span>${r.source}</span>
+                                                </div>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>`;
+
+                    case 'inlineOpen':
+                    case 'inlineCollapse':
+                        return `<div class="${boxClass} bg-indigo-50 border-indigo-200 flex items-center gap-3">
+                                    <div class="p-2 bg-white rounded shadow-sm text-indigo-500 text-xl">⚡</div>
+                                    <div>
+                                        <div class="font-bold text-indigo-700">${data.content?.toolName || 'Tool'}</div>
+                                        <div class="text-xs text-indigo-500">${data.content?.mainTask || 'Executing...'}</div>
+                                    </div>
+                                    <div class="ml-auto text-xs font-bold bg-white px-2 py-1 rounded text-indigo-400">${data.content?.status || ''}</div>
+                                </div>`;
+
+                    case 'openTab':
+                        return `<div class="${boxClass} bg-gray-100 flex items-center justify-between group cursor-pointer hover:bg-gray-200" onclick="window.open('${data.tab}', '_blank')">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-lg">🔗</span>
+                                        <span class="font-bold text-gray-700">${data.label || data.tab}</span>
+                                    </div>
+                                    <span class="text-xs text-gray-500 group-hover:text-gray-800">Open &nearr;</span>
+                                </div>`;
+
+                    default:
+                        return renderDefault(dataType, data);
+                }
+            } catch (e) {
+                return renderDefault('error', { message: 'Render failed', original: block });
+            }
+
+            function renderDefault(type, payload) {
+                return `<div class="${boxClass} bg-yellow-50 border-yellow-200">
+                            <span class="text-[10px] font-bold text-yellow-600 uppercase mb-1 block tracking-wider">${type}</span>
+                            <pre class="text-[10px] text-yellow-800 overflow-auto max-h-40">${JSON.stringify(payload, null, 2)}</pre>
+                        </div>`;
+            }
+        }
+
+        async function sendAgentMessage() {
+            const input = document.getElementById('agent-chat-input');
+            const message = input.value.trim();
+            const stream = document.getElementById('agent-stream-toggle').checked;
+
+            if (!message) return;
+
+            // UI Update
+            appendAgentMessage('user', message);
+            input.value = '';
+
+            // Auto-create session if needed
+            if (!currentAgentSessionId) {
+                await createAgentSession();
+                if (!currentAgentSessionId) return;
+            }
+
+            const historyDiv = document.getElementById('agent-chat-history');
+            const responseId = 'msg-' + Date.now();
+
+            // Create placeholder for response
+            appendAgentMessage('agent', '<span class="animate-pulse text-gray-400">Thinking...</span>', responseId);
+            const responseBubble = document.getElementById(responseId).querySelector('.msg-content');
+
+            if (stream) {
+                try {
+                    addLog('Streaming chat...');
+                    const res = await fetch(`/api/agent/session/${currentAgentSessionId}/stream?message=${encodeURIComponent(message)}`);
+
+                    if (!res.ok) {
+                        const errData = await res.json();
+                        throw new Error(errData.error || 'Stream request failed');
+                    }
+
+                    const reader = res.body.getReader();
+                    const decoder = new TextDecoder();
+                    let buffer = '';
+
+                    // Reset bubble for streaming content
+                    responseBubble.innerHTML = '';
+                    let currentTextNode = document.createTextNode('');
+                    responseBubble.appendChild(currentTextNode);
+
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+
+                        buffer += decoder.decode(value, { stream: true });
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop() || '';
+
+                        for (const line of lines) {
+                            if (!line.startsWith('data: ')) continue;
+                            const raw = line.slice(6);
+                            if (raw === '[DONE]') {
+                                addLog('Stream finished', 'success');
+                                continue;
+                            }
+
+                            try {
+                                const event = JSON.parse(raw);
+                                const eventType = event.type;
+                                const eventData = event.data || event;
+
+                                // 1. Plain Text Chunk
+                                if (eventType === 'textResponseChunk') {
+                                    const chunk = eventData.textResponse || '';
+                                    if (chunk) {
+                                        if (!currentTextNode) {
+                                            currentTextNode = document.createTextNode('');
+                                            responseBubble.appendChild(currentTextNode);
+                                        }
+                                        currentTextNode.nodeValue += chunk;
+                                        historyDiv.scrollTop = historyDiv.scrollHeight;
+                                    }
+
+                                    // 2. Complex Message Block (Full Schema)
+                                } else if (eventType === 'responseData') {
+                                    const contentStr = eventData.textResponse; // The inner JSON string
+                                    if (contentStr) {
+                                        try {
+                                            const block = JSON.parse(contentStr);
+                                            // Create container for the block
+                                            const div = document.createElement('div');
+                                            div.innerHTML = renderBlock(block);
+                                            responseBubble.appendChild(div);
+
+                                            // Reset text node so subsequent text chunks start fresh (optional, but good for separation)
+                                            currentTextNode = null;
+                                            historyDiv.scrollTop = historyDiv.scrollHeight;
+                                        } catch (e) {
+                                            console.error('Failed to parse block JSON', e);
+                                            // Fallback: append raw text
+                                            if (!currentTextNode) { currentTextNode = document.createTextNode(''); responseBubble.appendChild(currentTextNode); }
+                                            currentTextNode.nodeValue += contentStr;
+                                        }
+                                    }
+
+                                    // 3. Full Text Replace (Legacy/Simpler)
+                                } else if (eventType === 'textResponse') {
+                                    const text = eventData.textResponse || '';
+                                    let handled = false;
+
+                                    // Try to parse as JSON block first
+                                    if (text && text.trim().startsWith('{')) {
+                                        try {
+                                            const block = JSON.parse(text);
+                                            // Check minimal requirements for a block: uuid/type/content/dataType or just dataType
+                                            if (block && block.dataType) {
+                                                if (currentTextNode) {
+                                                    currentTextNode.remove();
+                                                    currentTextNode = null;
+                                                }
+                                                const div = document.createElement('div');
+                                                div.innerHTML = renderBlock(block);
+                                                responseBubble.appendChild(div);
+
+                                                historyDiv.scrollTop = historyDiv.scrollHeight;
+                                                handled = true;
+                                            }
+                                        } catch (e) {
+                                            // Not a valid JSON block, treat as text
+                                        }
+                                    }
+
+                                    if (!handled && text) {
+                                        if (!currentTextNode) { currentTextNode = document.createTextNode(''); responseBubble.appendChild(currentTextNode); }
+                                        currentTextNode.nodeValue = text; // Replace legacy text
+                                        historyDiv.scrollTop = historyDiv.scrollHeight;
+                                    }
+
+                                    // 4. Agent Thoughts
+                                } else if (eventType === 'agentThought') {
+                                    const thought = eventData.thought || '';
+                                    if (thought) addLog(`💭 ${thought}`);
+                                } else if (eventType === 'error') {
+                                    addLog(`Stream Error: ${eventData.error || 'Unknown'}`, 'error');
+                                    const errDiv = document.createElement('div');
+                                    errDiv.className = 'text-red-500 text-xs mt-2 border-t pt-2';
+                                    errDiv.textContent = `Error: ${eventData.error}`;
+                                    responseBubble.appendChild(errDiv);
+                                }
+
+                            } catch (parseErr) {
+                                // Skip unparseable lines
+                            }
+                        }
+                    }
+
+                    if (responseBubble.innerHTML === '') {
+                        responseBubble.innerHTML = '<span class="text-gray-400 italic">No response received</span>';
+                    }
+
+                } catch (e) {
+                    responseBubble.innerHTML = `<span class="text-red-500">Error: ${e.message}</span>`;
+                    addLog(`Stream error: ${e.message}`, 'error');
+                }
+            } else {
+                addLog('Sending sync chat...');
+                try {
+                    const res = await api('POST', `/api/agent/session/${currentAgentSessionId}/chat`, { message });
+                    if (res && res.text) {
+                        responseBubble.innerText = res.text;
+                        addLog('Chat received', 'success');
+                    } else {
+                        throw new Error(res.error || 'No response text');
+                    }
+                } catch (e) {
+                    responseBubble.innerHTML = `<span class="text-red-500">Error: ${e.message}</span>`;
+                    addLog(`Chat error: ${e.message}`, 'error');
+                }
+            }
+
+            historyDiv.scrollTop = historyDiv.scrollHeight;
+        }
+
+        function appendAgentMessage(role, text, id = null) {
+            const history = document.getElementById('agent-chat-history');
+            const div = document.createElement('div');
+            if (id) div.id = id;
+            div.className = `flex ${role === 'user' ? 'justify-end' : 'justify-start'}`;
+
+            const bubble = document.createElement('div');
+            let classes = 'max-w-[80%] rounded-lg px-4 py-2 text-sm shadow-sm ';
+
+            if (role === 'user') {
+                classes += 'bg-indigo-600 text-white rounded-br-none';
+            } else if (role === 'system') {
+                classes = 'text-center text-gray-400 text-xs w-full py-2 italic';
+            } else {
+                classes += 'bg-white border text-gray-800 rounded-bl-none msg-content whitespace-pre-wrap';
+            }
+
+            bubble.className = classes;
+            bubble.innerHTML = text;
+
+            div.appendChild(bubble);
+            history.appendChild(div);
+            history.scrollTop = history.scrollHeight;
+        }
+
         // ==================== INIT ====================
         window.onload = async () => {
             await loadAppInfo();
             await refreshActivities();
+            // Populate agent workspace dropdown
+            const agentWorkspaceSelect = document.getElementById('agent-workspace-select');
+            const workspaces = await fetchWorkspaces();
+            if (workspaces && workspaces.length > 0) {
+                agentWorkspaceSelect.innerHTML = '<option value="">(Auto-select first)</option>';
+                workspaces.forEach(ws => {
+                    const opt = document.createElement('option');
+                    opt.value = ws.slug;
+                    opt.textContent = ws.name;
+                    agentWorkspaceSelect.appendChild(opt);
+                });
+            } else {
+                agentWorkspaceSelect.innerHTML = '<option value="">No workspaces found</option>';
+            }
+            // Load agents for agent chat dropdown
+            await loadAgentList();
             await fetchVectorWorkspaces();
             await updateVectorConfigDisplay();
             await fetchTTSProviders();
