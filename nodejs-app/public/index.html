@@ -544,10 +544,9 @@ SDK v1.1.0 supports vector RAG.</textarea>
                         <div class="grid grid-cols-2 gap-4">
                             <div>
                                 <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Provider</label>
-                                <select id="stt-provider"
+                                <select id="stt-provider" onchange="fetchSTTModels()"
                                     class="w-full px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                    <option value="native">Native (Electron)</option>
-                                    <option value="whisper">Whisper (Browser - Transformers.js)</option>
+                                    <option value="">Loading...</option>
                                 </select>
                             </div>
                             <div>
@@ -1023,6 +1022,78 @@ SDK v1.1.0 supports vector RAG.</textarea>
 
         // Load models initially? Or when tab is switched?
         // Let's load on init for simplicity
+        // Global cache (moved from inside to be accessible)
+        let sttProvidersCache = [];
+
+        async function fetchSTTModels() {
+            const providerSelect = document.getElementById('stt-provider');
+            const modelSelect = document.getElementById('stt-model');
+
+            providerSelect.innerHTML = '<option>Loading...</option>';
+            modelSelect.innerHTML = '<option>Loading...</option>';
+            providerSelect.disabled = true;
+            modelSelect.disabled = true;
+
+            try {
+                addLog('Fetching STT providers...');
+                const result = await api('GET', '/api/stt/providers');
+
+                providerSelect.innerHTML = '';
+                providerSelect.disabled = false;
+                modelSelect.disabled = false;
+
+                if (result.success && Array.isArray(result.providers)) {
+                    sttProvidersCache = result.providers;
+
+                    // Populate Providers
+                    result.providers.forEach(p => {
+                        const opt = document.createElement('option');
+                        opt.value = p.id;
+                        opt.text = p.name;
+                        providerSelect.appendChild(opt);
+                    });
+
+                    // Add change listener to update models
+                    providerSelect.onchange = () => {
+                        updateSTTModelsUI();
+                    };
+
+                    // Initial update
+                    updateSTTModelsUI();
+
+                    addLog(`Loaded ${result.providers.length} STT providers.`, 'success');
+                } else {
+                    throw new Error(result.error || 'Failed to load providers');
+                }
+            } catch (e) {
+                console.error(e);
+                addLog(`Error fetching STT providers: ${e.message}`, 'error');
+                providerSelect.innerHTML = '<option value="">Error</option>';
+            }
+        }
+
+        function updateSTTModelsUI() {
+            const providerSelect = document.getElementById('stt-provider');
+            const modelSelect = document.getElementById('stt-model');
+            const currentProviderId = providerSelect.value;
+
+            const provider = sttProvidersCache.find(p => p.id === currentProviderId);
+            modelSelect.innerHTML = '';
+
+            if (provider && provider.models && provider.models.length > 0) {
+                provider.models.forEach(m => {
+                    const opt = document.createElement('option');
+                    opt.value = m.id;
+                    opt.text = `${m.name}`;
+                    if (m.recommended) opt.selected = true;
+                    modelSelect.appendChild(opt);
+                });
+            } else {
+                modelSelect.innerHTML = '<option value="">Default / No models</option>';
+            }
+        }
+
+        // Load models initially
         setTimeout(fetchSTTModels, 1000);
 
         // ==================== LLM: CHAT ====================

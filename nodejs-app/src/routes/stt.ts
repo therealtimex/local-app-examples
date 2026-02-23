@@ -5,7 +5,7 @@ import { RealtimeXSDK } from '@realtimex/sdk';
 export const createSTTRoutes = (sdk: RealtimeXSDK) => {
     const router = Router();
 
-    // GET /api/stt/listen
+    // POST /api/stt/listen
     // Listen to microphone and transcribe (frontend trigger via SDK)
     router.post('/listen', async (req, res) => {
         try {
@@ -30,14 +30,14 @@ export const createSTTRoutes = (sdk: RealtimeXSDK) => {
         }
     });
 
-    // GET /api/stt/models
-    // List available models via SDK
-    router.get('/models', async (req, res) => {
+    // GET /api/stt/providers
+    // List available providers and models via SDK
+    router.get('/providers', async (req, res) => {
         try {
-            const result = await sdk.stt.models();
-            res.json({ success: true, models: result });
+            const result = await sdk.stt.listProviders();
+            res.json({ success: true, providers: result });
         } catch (error: any) {
-            console.error('[STT] Models Error:', error.message);
+            console.error('[STT] Providers Error:', error.message);
             res.status(500).json({ success: false, error: error.message });
         }
     });

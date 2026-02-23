@@ -184,8 +184,10 @@
     "@nodelib/fs.scandir" "2.1.5"
     fastq "^1.6.0"
 
-"@realtimex/sdk@file:../../realtimex-sdk/typescript":
-  version "1.2.5"
+"@realtimex/sdk@^1.3.1":
+  version "1.3.1"
+  resolved "https://registry.yarnpkg.com/@realtimex/sdk/-/sdk-1.3.1.tgz#c2856d7030bacffdfa2e4e4b6db941adbbbd52f3"
+  integrity sha512-ZBCvsQKoX+1uBM2n81d60t2E9czbQMWUI2+6ZWhMk8GylUBKEF5J1uPvVefujHrsdkOABYs2oSWJMO+1DHPq1A==
 
 "@types/body-parser@*":
   version "1.19.6"
@@ -233,16 +235,16 @@
   integrity sha512-/pyBZWSLD2n0dcHE3hq8s8ZvcETHtEuF+3E7XVt0Ig2nvsVQXdghHVcEkIWjy9A0wKfTn97a/PSDYohKIlnP/w==
 
 "@types/node@*":
-  version "25.2.1"
-  resolved "https://registry.yarnpkg.com/@types/node/-/node-25.2.1.tgz#378021f9e765bb65ba36de16f3c3a8622c1fa03d"
-  integrity sha512-CPrnr8voK8vC6eEtyRzvMpgp3VyVRhgclonE7qYi6P9sXwYb59ucfrnmFBTaP0yUi8Gk4yZg/LlTJULGxvTNsg==
+  version "25.2.3"
+  resolved "https://registry.yarnpkg.com/@types/node/-/node-25.2.3.tgz#9c18245be768bdb4ce631566c7da303a5c99a7f8"
+  integrity sha512-m0jEgYlYz+mDJZ2+F4v8D1AyQb+QzsNqRuI7xg1VQX/KlKS0qT9r1Mo16yo5F/MtifXFgaofIFsdFMox2SxIbQ==
   dependencies:
     undici-types "~7.16.0"
 
 "@types/node@^20.10.0":
-  version "20.19.32"
-  resolved "https://registry.yarnpkg.com/@types/node/-/node-20.19.32.tgz#d2958783ac4cde2d501d145ac7174400a39c3da0"
-  integrity sha512-Ez8QE4DMfhjjTsES9K2dwfV258qBui7qxUsoaixZDiTzbde4U12e1pXGNu/ECsUIOi5/zoCxAQxIhQnaUQ2VvA==
+  version "20.19.33"
+  resolved "https://registry.yarnpkg.com/@types/node/-/node-20.19.33.tgz#ac8364c623b72d43125f0e7dd722bbe968f0c65e"
+  integrity sha512-Rs1bVAIdBs5gbTIKza/tgpMuG1k3U/UMJLWecIMxNdJFDMzcM5LOiLVRYh3PilWEYDIeUDv7bpiHPLPsbydGcw==
   dependencies:
     undici-types "~6.21.0"
 
@@ -644,9 +646,9 @@ get-proto@^1.0.1:
     es-object-atoms "^1.0.0"
 
 get-tsconfig@^4.7.5:
-  version "4.13.3"
-  resolved "https://registry.yarnpkg.com/get-tsconfig/-/get-tsconfig-4.13.3.tgz#4d1a0be959d52d9de289f789d7fee83cdbffd8bb"
-  integrity sha512-vp8Cj/+9Q/ibZUrq1rhy8mCTQpCk31A3uu9wc1C50yAb3x2pFHOsGdAZQ7jD86ARayyxZUViYeIztW+GE8dcrg==
+  version "4.13.6"
+  resolved "https://registry.yarnpkg.com/get-tsconfig/-/get-tsconfig-4.13.6.tgz#2fbfda558a98a691a798f123afd95915badce876"
+  integrity sha512-shZT/QMiSHc/YBLxxOkMtgSid5HFoauqCE3/exfsEcwg1WkeqjG+V40yBbBrsD+jW2HDXcs28xOfcbm2jI8Ddw==
   dependencies:
     resolve-pkg-maps "^1.0.0"
 
