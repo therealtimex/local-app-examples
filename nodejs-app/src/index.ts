@@ -20,6 +20,7 @@ import { createLLMRoutes } from './routes/llm';
 import { createTTSRoutes } from './routes/tts';
 import { createSTTRoutes } from './routes/stt';
 import { createAgentRoutes } from './routes/agent';
+import { createMCPRoutes } from './routes/mcp';
 
 const app = express();
 
@@ -53,6 +54,9 @@ const sdk = new RealtimeXSDK({
         'stt.listen',
         // Agent
         'agent.chat',
+        // MCP
+        'mcp.servers',
+        'mcp.tools',
     ],
 });
 
@@ -87,6 +91,9 @@ const startServer = async () => {
 
     // Agent: /api/agent/*
     app.use('/api/agent', createAgentRoutes(sdk));
+
+    // MCP: /api/mcp/*
+    app.use('/api/mcp', createMCPRoutes(sdk));
 
     // ========================
     // Health Check

@@ -82,6 +82,9 @@
             <button onclick="switchTab('agent')" class="tab-btn px-4 py-4 text-sm" data-tab="agent">
                 💬 Agent Chat
             </button>
+            <button onclick="switchTab('mcp')" class="tab-btn px-4 py-4 text-sm" data-tab="mcp">
+                🔌 MCP Tools
+            </button>
         </div>
     </nav>
 
@@ -633,6 +636,79 @@ SDK v1.1.0 supports vector RAG.</textarea>
                                 <input type="checkbox" id="agent-stream-toggle" class="w-3 h-3 text-indigo-600" checked>
                                 <span class="text-[10px] text-gray-500">Stream</span>
                             </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ==================== MCP TAB ==================== -->
+            <div id="tab-mcp" class="tab-content space-y-6">
+                <div class="bg-white rounded-xl shadow-sm border p-6">
+                    <h2 class="text-lg font-bold text-teal-600 mb-4">🔌 MCP Server Tools</h2>
+                    <p class="text-xs text-gray-500 mb-4">Interact with MCP (Model Context Protocol) servers. List
+                        servers, discover tools, and execute them.</p>
+
+                    <!-- Server List -->
+                    <div class="mb-6">
+                        <div class="flex items-center gap-4 mb-3">
+                            <h3 class="text-sm font-bold text-gray-700">Servers</h3>
+                            <select id="mcp-provider-filter" class="text-xs border rounded px-2 py-1">
+                                <option value="all">All</option>
+                                <option value="local">Local Only</option>
+                                <option value="remote">Remote Only</option>
+                            </select>
+                            <button onclick="fetchMCPServers()"
+                                class="px-4 py-1.5 bg-teal-500 text-white rounded-lg hover:bg-teal-600 text-xs font-bold">Refresh
+                                Servers</button>
+                        </div>
+                        <div id="mcp-servers-list" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div class="text-gray-400 text-sm text-center col-span-2 py-4">Click "Refresh Servers" to
+                                load...</div>
+                        </div>
+                    </div>
+
+                    <!-- Tools List -->
+                    <div id="mcp-tools-section" class="mb-6 hidden">
+                        <div class="flex items-center gap-2 mb-3">
+                            <h3 class="text-sm font-bold text-gray-700">Tools for: <span id="mcp-selected-server"
+                                    class="text-teal-600"></span></h3>
+                            <span id="mcp-selected-provider" class="text-xs bg-gray-100 px-2 py-0.5 rounded"></span>
+                        </div>
+                        <div id="mcp-tools-list" class="space-y-2"></div>
+                    </div>
+
+                    <!-- Tool Execution -->
+                    <div id="mcp-execute-section" class="hidden">
+                        <div class="border-2 border-teal-500 rounded-xl p-4 bg-teal-50">
+                            <h3 class="text-sm font-bold text-teal-700 mb-3">Execute: <span id="mcp-exec-tool-name"
+                                    class="text-teal-600"></span></h3>
+                            <p id="mcp-exec-tool-desc" class="text-xs text-gray-500 mb-3"></p>
+
+                            <!-- Schema Info -->
+                            <div id="mcp-exec-schema" class="mb-3 text-xs bg-white p-2 rounded border hidden">
+                                <span class="font-bold text-gray-500">Parameters:</span>
+                                <pre id="mcp-exec-schema-content"
+                                    class="text-gray-600 mt-1 overflow-auto max-h-24"></pre>
+                            </div>
+
+                            <!-- Arguments Editor -->
+                            <div class="mb-3">
+                                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Arguments
+                                    (JSON)</label>
+                                <textarea id="mcp-exec-args" rows="3"
+                                    class="w-full px-4 py-2 border rounded-lg text-sm font-mono">{}</textarea>
+                            </div>
+
+                            <button id="mcp-execute-btn" onclick="executeMCPTool()"
+                                class="w-full py-2.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 font-bold text-sm transition-all">⚡
+                                Execute Tool</button>
+
+                            <!-- Result -->
+                            <div id="mcp-exec-result" class="hidden mt-3">
+                                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Result</label>
+                                <pre
+                                    class="p-3 bg-gray-900 text-green-400 rounded-lg text-xs font-mono overflow-auto max-h-64"></pre>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -2206,6 +2282,164 @@ SDK v1.1.0 supports vector RAG.</textarea>
             div.appendChild(bubble);
             history.appendChild(div);
             history.scrollTop = history.scrollHeight;
+        }
+
+        // ==================== MCP ====================
+        let mcpSelectedServer = null;
+        let mcpSelectedProvider = null;
+
+        async function fetchMCPServers() {
+            const provider = document.getElementById('mcp-provider-filter').value;
+            addLog(`Fetching MCP servers (${provider})...`);
+            const container = document.getElementById('mcp-servers-list');
+            container.innerHTML = '<div class="text-gray-400 text-sm text-center col-span-2 py-4">⏳ Fetching servers...</div>';
+
+            try {
+                const data = await api('GET', `/api/mcp/servers?provider=${provider}`);
+                const servers = data.servers || [];
+
+                if (servers.length === 0) {
+                    container.innerHTML = '<div class="text-gray-400 text-sm text-center col-span-2 py-4">No servers found</div>';
+                    addLog('No MCP servers found', 'error');
+                    return;
+                }
+
+                container.innerHTML = servers.map(s => `
+                    <div class="border rounded-lg p-3 hover:border-teal-400 cursor-pointer transition-colors ${s.enabled ? 'bg-white' : 'bg-gray-50 opacity-60'}" onclick="selectMCPServer('${s.name}', '${s.provider}')">
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="font-bold text-sm text-gray-800">${s.display_name || s.name}</span>
+                            <span class="text-[10px] px-2 py-0.5 rounded ${s.provider === 'local' ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'}">${s.provider}</span>
+                        </div>
+                        <p class="text-xs text-gray-500 truncate">${s.description || 'No description'}</p>
+                        <div class="flex gap-1 mt-1">
+                            ${(s.tags || []).map(t => `<span class="text-[9px] bg-gray-100 px-1.5 py-0.5 rounded">${t}</span>`).join('')}
+                        </div>
+                    </div>
+                `).join('');
+
+                addLog(`Loaded ${servers.length} MCP servers`, 'success');
+            } catch (e) {
+                addLog(`Error: ${e.message}`, 'error');
+            }
+        }
+
+        async function selectMCPServer(name, provider) {
+            mcpSelectedServer = name;
+            mcpSelectedProvider = provider;
+            document.getElementById('mcp-selected-server').textContent = name;
+            document.getElementById('mcp-selected-provider').textContent = provider;
+            document.getElementById('mcp-tools-section').classList.remove('hidden');
+            document.getElementById('mcp-execute-section').classList.add('hidden');
+
+            const container = document.getElementById('mcp-tools-list');
+            container.innerHTML = `<div class="text-gray-400 text-sm py-4">⏳ Fetching tools for ${name}...</div>`;
+
+            addLog(`Fetching tools for '${name}' (${provider})...`);
+            try {
+                const data = await api('GET', `/api/mcp/servers/${name}/tools?provider=${provider}`);
+                const tools = data.tools || [];
+
+                if (tools.length === 0) {
+                    container.innerHTML = '<div class="text-gray-400 text-sm py-4">No tools available (server may need to boot first — try executing a tool)</div>';
+                    addLog(`No tools found for ${name}`, 'info');
+                    return;
+                }
+
+                container.innerHTML = tools.map(t => {
+                    const params = t.input_schema?.required?.join(', ') || 'none';
+                    return `
+                        <div class="border rounded-lg p-3 hover:border-teal-400 cursor-pointer transition-colors bg-white" onclick='prepareMCPExecution(${JSON.stringify(t).replace(/'/g, "&#39;")})'>
+                            <div class="flex items-center justify-between">
+                                <span class="font-bold text-sm text-teal-700">${t.name}</span>
+                                <span class="text-[10px] text-gray-400">required: ${params}</span>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-1">${t.description?.substring(0, 120) || 'No description'}${(t.description?.length || 0) > 120 ? '...' : ''}</p>
+                        </div>
+                    `;
+                }).join('');
+
+                addLog(`Found ${tools.length} tools for ${name}`, 'success');
+            } catch (e) {
+                addLog(`Error: ${e.message}`, 'error');
+            }
+        }
+
+        function prepareMCPExecution(tool) {
+            document.getElementById('mcp-execute-section').classList.remove('hidden');
+            document.getElementById('mcp-exec-tool-name').textContent = tool.name;
+            document.getElementById('mcp-exec-tool-desc').textContent = tool.description || '';
+            document.getElementById('mcp-exec-result').classList.add('hidden');
+
+            // Store tool name
+            document.getElementById('mcp-execute-section').dataset.toolName = tool.name;
+
+            // Show schema
+            if (tool.input_schema) {
+                document.getElementById('mcp-exec-schema').classList.remove('hidden');
+                document.getElementById('mcp-exec-schema-content').textContent = JSON.stringify(tool.input_schema, null, 2);
+
+                // Auto-generate example args from required fields
+                const example = {};
+                const props = tool.input_schema.properties || {};
+                const required = tool.input_schema.required || [];
+                for (const key of required) {
+                    const prop = props[key] || {};
+                    if (prop.type === 'string') example[key] = prop.default || '';
+                    else if (prop.type === 'integer' || prop.type === 'number') example[key] = prop.default || 0;
+                    else if (prop.type === 'boolean') example[key] = prop.default || false;
+                    else example[key] = prop.default || null;
+                }
+                document.getElementById('mcp-exec-args').value = JSON.stringify(example, null, 2);
+            } else {
+                document.getElementById('mcp-exec-schema').classList.add('hidden');
+                document.getElementById('mcp-exec-args').value = '{}';
+            }
+
+            // Scroll into view
+            document.getElementById('mcp-execute-section').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        async function executeMCPTool() {
+            const toolName = document.getElementById('mcp-execute-section').dataset.toolName;
+            const btn = document.getElementById('mcp-execute-btn');
+            const originalBtnText = btn.innerHTML;
+            let args;
+            try {
+                args = JSON.parse(document.getElementById('mcp-exec-args').value);
+            } catch (e) {
+                addLog('Invalid JSON arguments', 'error');
+                return;
+            }
+
+            addLog(`Executing ${mcpSelectedServer}/${toolName}...`);
+            btn.innerHTML = '⏳ Executing...';
+            btn.disabled = true;
+            btn.classList.add('opacity-50', 'cursor-not-allowed');
+
+            try {
+                const data = await api('POST', `/api/mcp/servers/${mcpSelectedServer}/tools/${toolName}/execute?provider=${mcpSelectedProvider}`, { arguments: args });
+                const resultDiv = document.getElementById('mcp-exec-result');
+                resultDiv.classList.remove('hidden');
+
+                // Format the output
+                const pre = resultDiv.querySelector('pre');
+                pre.textContent = JSON.stringify(data.result || data, null, 2);
+
+                // Scroll to result
+                resultDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+                if (data.success) {
+                    addLog(`Tool ${toolName} executed successfully`, 'success');
+                } else {
+                    addLog(`Tool ${toolName} failed: ${data.error}`, 'error');
+                }
+            } catch (e) {
+                addLog(`Error: ${e.message}`, 'error');
+            } finally {
+                btn.innerHTML = originalBtnText;
+                btn.disabled = false;
+                btn.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
         }
 
         // ==================== INIT ====================
