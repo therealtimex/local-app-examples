@@ -85,6 +85,9 @@
             <button onclick="switchTab('mcp')" class="tab-btn px-4 py-4 text-sm" data-tab="mcp">
                 🔌 MCP Tools
             </button>
+            <button onclick="switchTab('auth')" class="tab-btn px-4 py-4 text-sm" data-tab="auth">
+                🔐 Auth & DB
+            </button>
         </div>
     </nav>
 
@@ -713,6 +716,93 @@ SDK v1.1.0 supports vector RAG.</textarea>
                     </div>
                 </div>
             </div>
+
+            <!-- ==================== AUTH TAB ==================== -->
+            <div id="tab-auth" class="tab-content space-y-6">
+                <!-- Auth Status Banner -->
+                <div id="auth-status-banner"
+                    class="bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex items-center gap-3">
+                    <span class="text-2xl">⚠️</span>
+                    <div>
+                        <p class="text-sm font-bold text-yellow-800">Not Authenticated</p>
+                        <p class="text-xs text-yellow-600">Load config & login to enable RLS-aware operations.</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-6">
+                    <!-- Step 1: Load Config -->
+                    <div class="bg-white rounded-xl shadow-sm border p-6">
+                        <h3 class="text-md font-bold text-blue-600 mb-2">1️⃣ Load Supabase Config</h3>
+                        <p class="text-xs text-gray-500 mb-4">Fetch URL and anonKey from Main App (via
+                            <code>sdk.database.getConfig()</code>).
+                        </p>
+                        <button onclick="loadSupabaseConfig()"
+                            class="w-full py-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-bold text-sm">Load
+                            Config</button>
+                        <div id="auth-config-result"
+                            class="hidden mt-3 p-3 bg-gray-50 rounded-lg text-xs font-mono space-y-1"></div>
+                    </div>
+
+                    <!-- Step 2: Login -->
+                    <div class="bg-white rounded-xl shadow-sm border p-6">
+                        <h3 class="text-md font-bold text-green-600 mb-2">2️⃣ Supabase Login / Sign Up</h3>
+                        <p class="text-xs text-gray-500 mb-4">Sign in or create a new Supabase account, then sync token.
+                        </p>
+                        <div class="space-y-3">
+                            <input id="auth-email" type="email" placeholder="Email"
+                                class="w-full px-4 py-2 border rounded-lg text-sm">
+                            <input id="auth-password" type="password" placeholder="Password (min 6 chars)"
+                                class="w-full px-4 py-2 border rounded-lg text-sm">
+                            <div class="flex gap-2">
+                                <button onclick="supabaseLogin()"
+                                    class="flex-1 py-2.5 bg-green-500 text-white rounded-lg hover:bg-green-600 font-bold text-sm">Login
+                                    & Sync</button>
+                                <button onclick="supabaseSignup()"
+                                    class="flex-1 py-2.5 bg-gray-700 text-white rounded-lg hover:bg-gray-800 font-bold text-sm">Sign
+                                    Up</button>
+                            </div>
+                        </div>
+                        <div id="auth-login-result" class="hidden mt-3 p-3 rounded-lg text-xs"></div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-6">
+                    <!-- Step 3: Test Insert -->
+                    <div class="bg-white rounded-xl shadow-sm border-2 border-orange-400 p-6">
+                        <h3 class="text-md font-bold text-orange-600 mb-2">3️⃣ Test Activity Insert</h3>
+                        <p class="text-xs text-gray-500 mb-4">Insert an activity to verify RLS bypass works.</p>
+                        <div class="flex gap-2">
+                            <input id="auth-test-data" type="text" value='{"test": "rls-bypass", "source": "auth-demo"}'
+                                class="flex-1 px-4 py-2 border rounded-lg text-sm font-mono">
+                            <button onclick="testAuthInsert()"
+                                class="px-6 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 font-bold text-sm">Insert</button>
+                        </div>
+                        <div id="auth-insert-result" class="hidden mt-3 p-3 rounded-lg text-xs font-mono"></div>
+                    </div>
+
+                    <!-- Auth Status -->
+                    <div class="bg-white rounded-xl shadow-sm border p-6">
+                        <h3 class="text-md font-bold text-purple-600 mb-2">📊 Auth Status</h3>
+                        <p class="text-xs text-gray-500 mb-4">Check current authentication state.</p>
+                        <button onclick="checkAuthStatus()"
+                            class="w-full py-2.5 bg-purple-500 text-white rounded-lg hover:bg-purple-600 font-bold text-sm mb-3">Refresh
+                            Status</button>
+                        <div id="auth-status-detail" class="p-3 bg-gray-50 rounded-lg text-xs space-y-2">
+                            <div class="flex justify-between"><span class="text-gray-500">Config Loaded:</span><span
+                                    id="auth-s-config" class="font-bold">—</span></div>
+                            <div class="flex justify-between"><span class="text-gray-500">Supabase Client:</span><span
+                                    id="auth-s-client" class="font-bold">—</span></div>
+                            <div class="flex justify-between"><span class="text-gray-500">User Logged In:</span><span
+                                    id="auth-s-user" class="font-bold">—</span></div>
+                            <div class="flex justify-between"><span class="text-gray-500">User Email:</span><span
+                                    id="auth-s-email" class="font-bold">—</span></div>
+                            <hr class="border-gray-200">
+                            <div class="flex justify-between"><span class="text-gray-500">Keycloak Token:</span><span
+                                    id="auth-s-kc" class="font-bold">—</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- RIGHT: Logs Panel -->
@@ -734,6 +824,128 @@ SDK v1.1.0 supports vector RAG.</textarea>
         let selectedActivity = null;
         let activities = [];
         let currentAgentSessionId = null;
+
+        // ==================== AUTH FUNCTIONS ====================
+        async function loadSupabaseConfig() {
+            addLog('Loading Supabase config from Main App...');
+            try {
+                const data = await api('GET', '/api/auth/config');
+                const el = document.getElementById('auth-config-result');
+                el.classList.remove('hidden');
+                if (data.success) {
+                    el.innerHTML = `<div class="text-green-700">✅ Config loaded</div>`
+                        + `<div>URL: ${data.config.url}</div>`
+                        + `<div>Key: ${data.config.anonKey}</div>`
+                        + `<div>Mode: ${data.config.mode}</div>`
+                        + `<div>Tables: ${(data.config.tables || []).join(', ')}</div>`;
+                    addLog('Supabase config loaded successfully', 'success');
+                } else {
+                    el.innerHTML = `<div class="text-red-600">❌ ${data.error}</div>`;
+                    addLog(`Config load failed: ${data.error}`, 'error');
+                }
+            } catch (e) {
+                addLog(`Config load error: ${e.message}`, 'error');
+            }
+        }
+
+        async function supabaseLogin() {
+            const email = document.getElementById('auth-email').value;
+            const password = document.getElementById('auth-password').value;
+            if (!email || !password) { addLog('Email and password required', 'error'); return; }
+
+            addLog(`Logging in as ${email}...`);
+            try {
+                const data = await api('POST', '/api/auth/login', { email, password });
+                const el = document.getElementById('auth-login-result');
+                el.classList.remove('hidden');
+                if (data.success) {
+                    el.className = 'mt-3 p-3 rounded-lg text-xs bg-green-50 border border-green-200 text-green-800';
+                    el.innerHTML = `✅ ${data.message}<br>User: ${data.user?.email}<br>Token synced: ${data.tokenSynced}`;
+                    updateAuthBanner(true, data.user?.email);
+                    addLog(`Login successful: ${data.user?.email}`, 'success');
+                } else {
+                    el.className = 'mt-3 p-3 rounded-lg text-xs bg-red-50 border border-red-200 text-red-800';
+                    el.innerHTML = `❌ ${data.error}`;
+                    addLog(`Login failed: ${data.error}`, 'error');
+                }
+            } catch (e) {
+                addLog(`Login error: ${e.message}`, 'error');
+            }
+        }
+
+        async function supabaseSignup() {
+            const email = document.getElementById('auth-email').value;
+            const password = document.getElementById('auth-password').value;
+            if (!email || !password) { addLog('Email and password required', 'error'); return; }
+            if (password.length < 6) { addLog('Password must be at least 6 characters', 'error'); return; }
+
+            addLog(`Creating account for ${email}...`);
+            try {
+                const data = await api('POST', '/api/auth/signup', { email, password });
+                const el = document.getElementById('auth-login-result');
+                el.classList.remove('hidden');
+                if (data.success) {
+                    el.className = 'mt-3 p-3 rounded-lg text-xs bg-blue-50 border border-blue-200 text-blue-800';
+                    el.innerHTML = `✅ ${data.message}<br>User ID: ${data.user?.id}<br>Now click "Login & Sync" to authenticate.`;
+                    addLog(`Account created: ${data.user?.email}`, 'success');
+                } else {
+                    el.className = 'mt-3 p-3 rounded-lg text-xs bg-red-50 border border-red-200 text-red-800';
+                    el.innerHTML = `❌ ${data.error}`;
+                    addLog(`Signup failed: ${data.error}`, 'error');
+                }
+            } catch (e) {
+                addLog(`Signup error: ${e.message}`, 'error');
+            }
+        }
+
+        async function testAuthInsert() {
+            addLog('Testing activity insert (RLS bypass test)...');
+            try {
+                const rawData = JSON.parse(document.getElementById('auth-test-data').value);
+                const data = await api('POST', '/api/activities', { raw_data: rawData });
+                const el = document.getElementById('auth-insert-result');
+                el.classList.remove('hidden');
+                if (data.success) {
+                    el.className = 'mt-3 p-3 rounded-lg text-xs bg-green-50 border border-green-200 text-green-800';
+                    el.innerHTML = `✅ Insert succeeded!<br>ID: ${data.activity?.id || 'N/A'}`;
+                    addLog('Activity insert succeeded (RLS bypass works!)', 'success');
+                } else {
+                    el.className = 'mt-3 p-3 rounded-lg text-xs bg-red-50 border border-red-200 text-red-800';
+                    el.innerHTML = `❌ Insert failed: ${data.error}<br><small>This is expected if RLS is blocking unauthenticated requests.</small>`;
+                    addLog(`Activity insert failed: ${data.error}`, 'error');
+                }
+            } catch (e) {
+                addLog(`Insert test error: ${e.message}`, 'error');
+            }
+        }
+
+        async function checkAuthStatus() {
+            addLog('Checking auth status...');
+            try {
+                const data = await api('GET', '/api/auth/status');
+                if (data.success) {
+                    const s = data.supabase || {};
+                    const k = data.keycloak || {};
+                    document.getElementById('auth-s-config').textContent = s.configLoaded ? '✅ Yes' : '❌ No';
+                    document.getElementById('auth-s-client').textContent = s.clientReady ? '✅ Ready' : '❌ Not ready';
+                    document.getElementById('auth-s-user').textContent = s.userLoggedIn ? '✅ Yes' : '❌ No';
+                    document.getElementById('auth-s-email').textContent = s.userEmail || '—';
+                    document.getElementById('auth-s-kc').textContent = k.hasToken ? '✅ Yes' : '❌ No';
+                    if (s.userLoggedIn) updateAuthBanner(true, s.userEmail);
+                    addLog('Auth status refreshed', 'success');
+                }
+            } catch (e) {
+                addLog(`Status check error: ${e.message}`, 'error');
+            }
+        }
+
+        function updateAuthBanner(authenticated, email) {
+            const banner = document.getElementById('auth-status-banner');
+            if (authenticated) {
+                banner.className = 'bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3';
+                banner.innerHTML = `<span class="text-2xl">✅</span><div><p class="text-sm font-bold text-green-800">Authenticated</p><p class="text-xs text-green-600">Logged in as ${email}. RLS-aware operations enabled.</p></div>`;
+            }
+        }
 
         // ==================== TAB SWITCHING ====================
         function switchTab(tabId) {

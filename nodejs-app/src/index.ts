@@ -21,6 +21,7 @@ import { createTTSRoutes } from './routes/tts';
 import { createSTTRoutes } from './routes/stt';
 import { createAgentRoutes } from './routes/agent';
 import { createMCPRoutes } from './routes/mcp';
+import { createAuthRoutes } from './routes/auth';
 
 const app = express();
 
@@ -57,6 +58,8 @@ const sdk = new RealtimeXSDK({
         // MCP
         'mcp.servers',
         'mcp.tools',
+        // Database config
+        'database.config',
     ],
 });
 
@@ -94,6 +97,9 @@ const startServer = async () => {
 
     // MCP: /api/mcp/*
     app.use('/api/mcp', createMCPRoutes(sdk));
+
+    // Auth: /api/auth/*
+    app.use('/api/auth', createAuthRoutes(sdk));
 
     // ========================
     // Health Check
@@ -142,6 +148,10 @@ const startServer = async () => {
         console.log('   Agent Chat:  POST /api/agent/chat');
         console.log('   Agent Sess:  POST /api/agent/session');
         console.log('   Agent Stream:GET  /api/agent/stream');
+        console.log('   Auth Config: GET  /api/auth/config');
+        console.log('   Auth Login:  POST /api/auth/login');
+        console.log('   Auth Sync:   POST /api/auth/sync-token');
+        console.log('   Auth Status: GET  /api/auth/status');
     });
 };
 
