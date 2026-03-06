@@ -8,6 +8,20 @@
  * - LLM & Vectors: Chat, embeddings, and RAG patterns
  */
 
+import nodeFetch, { Headers, Request, Response } from "node-fetch";
+
+// Polyfill global fetch
+if (!globalThis.fetch) {
+    // @ts-ignore
+    globalThis.fetch = nodeFetch as any;
+    // @ts-ignore
+    globalThis.Headers = Headers as any;
+    // @ts-ignore
+    globalThis.Request = Request as any;
+    // @ts-ignore
+    globalThis.Response = Response as any;
+}
+
 import express from 'express';
 import path from 'path';
 import { RealtimeXSDK } from '@realtimex/sdk';
