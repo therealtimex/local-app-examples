@@ -1,4 +1,4 @@
-realtimex-sdk=1.2.3
+realtimex-sdk
 nicegui
 httpx
 python-dotenv
