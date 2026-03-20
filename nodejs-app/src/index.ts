@@ -36,6 +36,7 @@ import { createSTTRoutes } from './routes/stt';
 import { createAgentRoutes } from './routes/agent';
 import { createMCPRoutes } from './routes/mcp';
 import { createAuthRoutes } from './routes/auth';
+import { createAcpAgentRoutes } from './routes/acpAgent';
 
 const app = express();
 
@@ -74,6 +75,8 @@ const sdk = new RealtimeXSDK({
         'mcp.tools',
         // Database config
         'database.config',
+        // ACP Agent
+        'acp.agent',
     ],
 });
 
@@ -114,6 +117,9 @@ const startServer = async () => {
 
     // Auth: /api/auth/*
     app.use('/api/auth', createAuthRoutes(sdk));
+
+    // ACP Agent: /api/acp-agent/*
+    app.use('/api/acp-agent', createAcpAgentRoutes(sdk));
 
     // ========================
     // Health Check

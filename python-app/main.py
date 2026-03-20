@@ -1,8 +1,13 @@
 import os
+import sys
 import asyncio
 import json
 from datetime import datetime
 from typing import List, Dict, Any, Optional
+
+# Use local SDK for development
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../realtimex-sdk/python'))
+
 from nicegui import ui, app
 from realtimex_sdk import RealtimeXSDK, SDKConfig, PermissionDeniedError, LLMProviderError, LLMPermissionError
 
@@ -29,7 +34,9 @@ sdk = RealtimeXSDK(config=SDKConfig(
         # TTS
         'tts.generate',
         # STT
-        'stt.listen'
+        'stt.listen',
+        # ACP Agent
+        'acp.agent'
     ]
 ))
 
@@ -694,6 +701,7 @@ async def main_page():
         t3 = ui.tab('🤖 LLM & Vectors')
         t4 = ui.tab('🔊 Text-to-Speech')
         t5 = ui.tab('🎤 Speech-to-Text')
+        t6 = ui.tab('🤖 ACP Agent')
 
     with ui.row().classes('w-full no-wrap items-start gap-8 p-8'):
         with ui.column().classes('flex-1 min-w-0'):
@@ -897,6 +905,159 @@ async def main_page():
                             ui.label('Tests').classes('text-md font-bold text-blue-600 mb-2')
                             ui.button('🎤 Start Listening', on_click=stt_listen).props('color=red size=lg').classes('w-full h-16')
                             stt_status_label = ui.label('Ready to listen').classes('text-md text-gray-500 mt-4 text-center w-full block')
+
+                # --- TAB 6: ACP AGENT ---
+                with ui.tab_panel(t6).classes('p-0 gap-6'):
+                    acp_state = {'session_key': None, 'messages': []}
+
+                    with ui.card().classes('w-full p-6'):
+                        ui.label('🤖 ACP Agent Chat').classes('text-lg font-bold text-violet-600 mb-2')
+                        ui.label('Multi-turn chat with CLI agents (Claude, Gemini, Qwen, etc.)').classes('text-xs text-gray-500 mb-4')
+
+                        # Controls
+                        with ui.row().classes('w-full gap-2 items-end mb-2'):
+                            acp_agent_sel = ui.select(options={}, label='Agent').classes('flex-1')
+                            acp_model_sel = ui.select(options={'': '(default)'}, label='Model', value='').classes('flex-1')
+                            acp_cwd = ui.input(label='Working Directory', value=os.getcwd()).classes('flex-1')
+                            acp_start_btn = ui.button('▶ Start', color='green')
+                            acp_close_btn = ui.button('■ End', color='red')
+                            acp_close_btn.set_visibility(False)
+
+                        with ui.row().classes('w-full items-center gap-2 mb-2'):
+                            acp_stream_sw = ui.switch('Stream', value=True)
+                            acp_status = ui.label('Loading agents...').classes('text-xs text-gray-400 flex-1')
+
+                        # Chat area
+                        acp_chat = ui.column().classes('w-full border rounded-lg p-4 bg-gray-50 gap-2 overflow-y-auto').style('height: 400px;')
+
+                        # Input
+                        with ui.row().classes('w-full gap-2'):
+                            acp_input = ui.input(placeholder='Type a message...').classes('flex-1').props('outlined')
+                            acp_input.disable()
+                            acp_send_btn = ui.button('Send', color='violet')
+                            acp_send_btn.disable()
+
+                    acp_agents_cache = []
+
+                    async def acp_load_agents():
+                        nonlocal acp_agents_cache
+                        try:
+                            agents = await sdk.acp_agent.list_agents(include_models=True)
+                            installed = [a for a in agents if a.installed]
+                            acp_agents_cache = installed
+                            acp_agent_sel.options = {a.id: a.label for a in installed}
+                            if installed:
+                                acp_agent_sel.value = installed[0].id
+                            acp_agent_sel.update()
+                            acp_update_models()
+                            acp_status.text = f'{len(installed)} agent(s) available'
+                            add_log(f'ACP: {len(installed)} agents loaded')
+                        except Exception as e:
+                            acp_status.text = f'Failed: {e}'
+                            add_log(f'ACP agents error: {e}', 'error')
+
+                    def acp_update_models():
+                        agent_id = acp_agent_sel.value
+                        agent = next((a for a in acp_agents_cache if a.id == agent_id), None)
+                        opts = {'': '(default)'}
+                        if agent and agent.models:
+                            for m in agent.models:
+                                opts[m.get('id', '')] = m.get('name') or m.get('id', '')
+                        acp_model_sel.options = opts
+                        acp_model_sel.value = ''
+                        acp_model_sel.update()
+
+                    acp_agent_sel.on_value_change(lambda _: acp_update_models())
+
+                    def acp_render():
+                        acp_chat.clear()
+                        with acp_chat:
+                            for msg in acp_state['messages']:
+                                is_user = msg['role'] == 'user'
+                                with ui.row().classes(f'w-full {"justify-end" if is_user else "justify-start"}'):
+                                    with ui.card().classes(
+                                        f'max-w-[80%] {"bg-violet-600 text-white" if is_user else "bg-white"}'
+                                    ).style('white-space: pre-wrap;'):
+                                        ui.markdown(msg['text'])
+
+                    async def acp_create():
+                        agent_id = acp_agent_sel.value
+                        if not agent_id:
+                            ui.notify('Select an agent first', type='warning')
+                            return
+                        model = acp_model_sel.value or None
+                        acp_status.text = 'Creating session...'
+                        try:
+                            session = await sdk.acp_agent.create_session(
+                                agent_id, cwd=acp_cwd.value or os.getcwd(),
+                                model=model, approval_policy='approve-all',
+                            )
+                            acp_state['session_key'] = session.session_key
+                            acp_state['messages'] = []
+                            acp_render()
+                            acp_status.text = f'Session ready — {agent_id}'
+                            acp_start_btn.set_visibility(False)
+                            acp_close_btn.set_visibility(True)
+                            acp_input.enable()
+                            acp_send_btn.enable()
+                            add_log(f'ACP: Session created for {agent_id}', 'success')
+                        except Exception as e:
+                            acp_status.text = f'Failed: {e}'
+                            add_log(f'ACP session error: {e}', 'error')
+
+                    async def acp_close():
+                        if acp_state['session_key']:
+                            try:
+                                await sdk.acp_agent.close_session(acp_state['session_key'])
+                            except Exception:
+                                pass
+                        acp_state['session_key'] = None
+                        acp_start_btn.set_visibility(True)
+                        acp_close_btn.set_visibility(False)
+                        acp_input.disable()
+                        acp_send_btn.disable()
+                        acp_status.text = 'Session closed'
+                        add_log('ACP: Session closed')
+
+                    async def acp_send():
+                        sk = acp_state['session_key']
+                        if not sk:
+                            return
+                        text = acp_input.value.strip()
+                        if not text:
+                            return
+                        acp_input.value = ''
+                        acp_state['messages'].append({'role': 'user', 'text': text})
+                        acp_state['messages'].append({'role': 'assistant', 'text': ''})
+                        acp_render()
+                        acp_send_btn.disable()
+
+                        try:
+                            if acp_stream_sw.value:
+                                full_text = ''
+                                async for event in sdk.acp_agent.stream_chat(sk, text):
+                                    if event.type == 'text_delta':
+                                        full_text += event.data.get('text', '')
+                                        acp_state['messages'][-1]['text'] = full_text
+                                acp_render()
+                                add_log(f'ACP: Stream complete', 'success')
+                            else:
+                                resp = await sdk.acp_agent.chat(sk, text)
+                                acp_state['messages'][-1]['text'] = resp.text
+                                acp_render()
+                                add_log(f'ACP: Response received', 'success')
+                        except Exception as e:
+                            acp_state['messages'][-1]['text'] = f'Error: {e}'
+                            acp_render()
+                            add_log(f'ACP: {e}', 'error')
+                        finally:
+                            acp_send_btn.enable()
+
+                    acp_start_btn.on_click(acp_create)
+                    acp_close_btn.on_click(acp_close)
+                    acp_send_btn.on_click(acp_send)
+                    acp_input.on('keydown.enter', acp_send)
+                    ui.timer(0.5, acp_load_agents, once=True)
 
 
         with ui.column().classes('w-80'):
