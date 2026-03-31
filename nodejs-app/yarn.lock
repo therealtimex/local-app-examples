@@ -59,10 +59,10 @@
     "@nodelib/fs.scandir" "2.1.5"
     fastq "^1.6.0"
 
-"@realtimex/sdk@^1.4.0":
-  version "1.4.0"
-  resolved "https://registry.npmjs.org/@realtimex/sdk/-/sdk-1.4.0.tgz"
-  integrity sha512-1wl9TstTRe8CV1l4M8JRF3Sakz7Irn1gPK9/rZYqNwdIRXtEp9JloQ3XyIFfG1aD9+gzDziWt1MZabstif0Big==
+"@realtimex/sdk@^1.5.0":
+  version "1.5.0"
+  resolved "https://registry.npmjs.org/@realtimex/sdk/-/sdk-1.5.0.tgz"
+  integrity sha512-zXdiJ371LAjNywSGYumy6VVDu50e0o75FYDrYiaaPdCUUda2IUH62JrSWja7e2I0e46geiTMrNbudHg7JQYF0A==
 
 "@supabase/auth-js@2.98.0":
   version "2.98.0"

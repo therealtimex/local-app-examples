@@ -914,11 +914,22 @@ async def main_page():
                         ui.label('🤖 ACP Agent Chat').classes('text-lg font-bold text-violet-600 mb-2')
                         ui.label('Multi-turn chat with CLI agents (Claude, Gemini, Qwen, etc.)').classes('text-xs text-gray-500 mb-4')
 
-                        # Controls
+                        # Controls row 1: agent, model, cwd
                         with ui.row().classes('w-full gap-2 items-end mb-2'):
                             acp_agent_sel = ui.select(options={}, label='Agent').classes('flex-1')
                             acp_model_sel = ui.select(options={'': '(default)'}, label='Model', value='').classes('flex-1')
+                            acp_model_input = ui.input(label='Model ID', placeholder='e.g. claude-sonnet-4-6').classes('flex-1')
+                            acp_model_input.set_visibility(False)
                             acp_cwd = ui.input(label='Working Directory', value=os.getcwd()).classes('flex-1')
+
+                        # Controls row 2: forwarding, policy, start/close
+                        with ui.row().classes('w-full gap-2 items-end mb-2'):
+                            acp_fwd_sel = ui.select(options={'': '(native)'}, label='Provider', value='').classes('flex-1')
+                            acp_fwd_sel.set_visibility(False)
+                            acp_policy_sel = ui.select(
+                                options={'approve-all': 'Auto-approve all', 'approve-reads': 'Approve reads only'},
+                                label='Permissions', value='approve-reads'
+                            ).classes('flex-1')
                             acp_start_btn = ui.button('▶ Start', color='green')
                             acp_close_btn = ui.button('■ End', color='red')
                             acp_close_btn.set_visibility(False)
@@ -959,6 +970,7 @@ async def main_page():
                     def acp_update_models():
                         agent_id = acp_agent_sel.value
                         agent = next((a for a in acp_agents_cache if a.id == agent_id), None)
+                        # Native model dropdown
                         opts = {'': '(default)'}
                         if agent and agent.models:
                             for m in agent.models:
@@ -966,31 +978,65 @@ async def main_page():
                         acp_model_sel.options = opts
                         acp_model_sel.value = ''
                         acp_model_sel.update()
+                        # Forwarding dropdown
+                        fwd_opts = {'': '(native)'}
+                        if agent and agent.supportsProviderForwarding and agent.forwardableProviders:
+                            for p in agent.forwardableProviders:
+                                fwd_opts[p] = p.capitalize()
+                            acp_fwd_sel.set_visibility(True)
+                        else:
+                            acp_fwd_sel.set_visibility(False)
+                        acp_fwd_sel.options = fwd_opts
+                        acp_fwd_sel.value = ''
+                        acp_fwd_sel.update()
+                        acp_toggle_model_ui()
+
+                    def acp_toggle_model_ui():
+                        fwd = acp_fwd_sel.value
+                        if fwd:
+                            acp_model_sel.set_visibility(False)
+                            acp_model_input.set_visibility(True)
+                            acp_model_input.value = ''
+                        else:
+                            acp_model_sel.set_visibility(True)
+                            acp_model_input.set_visibility(False)
 
                     acp_agent_sel.on_value_change(lambda _: acp_update_models())
+                    acp_fwd_sel.on_value_change(lambda _: acp_toggle_model_ui())
 
                     def acp_render():
                         acp_chat.clear()
                         with acp_chat:
                             for msg in acp_state['messages']:
-                                is_user = msg['role'] == 'user'
-                                with ui.row().classes(f'w-full {"justify-end" if is_user else "justify-start"}'):
-                                    with ui.card().classes(
-                                        f'max-w-[80%] {"bg-violet-600 text-white" if is_user else "bg-white"}'
-                                    ).style('white-space: pre-wrap;'):
-                                        ui.markdown(msg['text'])
+                                role = msg['role']
+                                if role == 'user':
+                                    with ui.row().classes('w-full justify-end'):
+                                        with ui.card().classes('max-w-[80%] bg-violet-600 text-white').style('white-space: pre-wrap;'):
+                                            ui.markdown(msg['text'])
+                                elif role == 'thought':
+                                    with ui.row().classes('w-full justify-start'):
+                                        with ui.card().classes('max-w-[80%] bg-gray-100 border border-gray-200').style('white-space: pre-wrap;'):
+                                            ui.label(msg['text']).classes('text-xs text-gray-500 italic')
+                                else:
+                                    with ui.row().classes('w-full justify-start'):
+                                        with ui.card().classes('max-w-[80%] bg-white').style('white-space: pre-wrap;'):
+                                            ui.markdown(msg['text'])
 
                     async def acp_create():
                         agent_id = acp_agent_sel.value
                         if not agent_id:
                             ui.notify('Select an agent first', type='warning')
                             return
-                        model = acp_model_sel.value or None
-                        acp_status.text = 'Creating session...'
+                        fwd = acp_fwd_sel.value or None
+                        model = (acp_model_input.value.strip() if fwd else acp_model_sel.value) or None
+                        policy = acp_policy_sel.value or None
+                        label = f'{agent_id} via {fwd}' if fwd else agent_id
+                        acp_status.text = f'Creating session for {label}...'
                         try:
                             session = await sdk.acp_agent.create_session(
                                 agent_id, cwd=acp_cwd.value or os.getcwd(),
-                                model=model, approval_policy='approve-all',
+                                model=model, approval_policy=policy,
+                                forwarded_provider=fwd,
                             )
                             acp_state['session_key'] = session.session_key
                             acp_state['messages'] = []
@@ -1028,26 +1074,48 @@ async def main_page():
                             return
                         acp_input.value = ''
                         acp_state['messages'].append({'role': 'user', 'text': text})
-                        acp_state['messages'].append({'role': 'assistant', 'text': ''})
-                        acp_render()
                         acp_send_btn.disable()
 
                         try:
                             if acp_stream_sw.value:
-                                full_text = ''
+                                thought = ''
+                                output = ''
                                 async for event in sdk.acp_agent.stream_chat(sk, text):
                                     if event.type == 'text_delta':
-                                        full_text += event.data.get('text', '')
-                                        acp_state['messages'][-1]['text'] = full_text
+                                        if event.data.get('stream') == 'thought':
+                                            thought += event.data.get('text', '')
+                                        else:
+                                            output += event.data.get('text', '')
+                                    elif event.type == 'tool_call':
+                                        tool = event.data.get('text', '')
+                                        status = event.data.get('status', '')
+                                        add_log(f'ACP tool: {tool} ({status})')
+                                    elif event.type == 'permission_request':
+                                        req_id = event.data.get('requestId', '')
+                                        action = event.data.get('action', '')
+                                        target = event.data.get('target', '')
+                                        opts = event.data.get('options', [])
+                                        add_log(f'ACP: Permission request — {action}: {target}', 'warning')
+                                        if opts:
+                                            await sdk.acp_agent.resolve_permission(
+                                                sk, request_id=req_id, option_id=opts[0]
+                                            )
+                                            add_log(f'ACP: Auto-resolved → {opts[0]}', 'success')
+                                if thought:
+                                    acp_state['messages'].append({'role': 'thought', 'text': thought})
+                                if output:
+                                    acp_state['messages'].append({'role': 'assistant', 'text': output})
+                                elif not thought:
+                                    acp_state['messages'].append({'role': 'assistant', 'text': '(no output)'})
                                 acp_render()
-                                add_log(f'ACP: Stream complete', 'success')
+                                add_log('ACP: Stream complete', 'success')
                             else:
                                 resp = await sdk.acp_agent.chat(sk, text)
-                                acp_state['messages'][-1]['text'] = resp.text
+                                acp_state['messages'].append({'role': 'assistant', 'text': resp.text})
                                 acp_render()
-                                add_log(f'ACP: Response received', 'success')
+                                add_log('ACP: Response received', 'success')
                         except Exception as e:
-                            acp_state['messages'][-1]['text'] = f'Error: {e}'
+                            acp_state['messages'].append({'role': 'assistant', 'text': f'Error: {e}'})
                             acp_render()
                             add_log(f'ACP: {e}', 'error')
                         finally:

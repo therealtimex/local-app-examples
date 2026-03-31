@@ -838,6 +838,7 @@ SDK v1.1.0 supports vector RAG.</textarea>
                                 <select id="acp-model-select" class="text-xs border rounded-lg px-3 py-1.5 w-full focus:ring-2 focus:ring-violet-500 bg-white">
                                     <option value="">(default)</option>
                                 </select>
+                                <input id="acp-model-input" class="hidden text-xs border rounded-lg px-3 py-1.5 w-full focus:ring-2 focus:ring-violet-500 bg-white" placeholder="e.g. claude-sonnet-4-6">
                             </div>
                             <div class="flex items-center gap-2 flex-1">
                                 <label class="text-xs text-gray-500 font-bold whitespace-nowrap">CWD:</label>
@@ -848,6 +849,12 @@ SDK v1.1.0 supports vector RAG.</textarea>
                                 <select id="acp-policy-select" class="text-xs border rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-violet-500 bg-white">
                                     <option value="approve-all">Auto-approve all</option>
                                     <option value="approve-reads" selected>Approve reads only (writes ask)</option>
+                                </select>
+                            </div>
+                            <div id="acp-fwd-container" class="flex items-center gap-2 hidden">
+                                <label class="text-xs text-gray-500 font-bold whitespace-nowrap">Provider:</label>
+                                <select id="acp-fwd-select" onchange="acpUpdateModelUI()" class="text-xs border rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-violet-500 bg-white">
+                                    <option value="">(native)</option>
                                 </select>
                             </div>
                         </div>
@@ -2877,20 +2884,58 @@ SDK v1.1.0 supports vector RAG.</textarea>
                     sel.appendChild(opt);
                 });
             }
+            // Forwarding dropdown
+            const fwdContainer = document.getElementById('acp-fwd-container');
+            const fwdSel = document.getElementById('acp-fwd-select');
+            fwdSel.innerHTML = '<option value="">(native)</option>';
+            if (agent?.supportsProviderForwarding && agent?.forwardableProviders?.length) {
+                agent.forwardableProviders.forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p;
+                    opt.textContent = p.charAt(0).toUpperCase() + p.slice(1);
+                    fwdSel.appendChild(opt);
+                });
+                fwdContainer.classList.remove('hidden');
+            } else {
+                fwdContainer.classList.add('hidden');
+            }
+            acpUpdateModelUI();
+        }
+
+        function acpUpdateModelUI() {
+            const fwd = document.getElementById('acp-fwd-select').value;
+            const modelSelect = document.getElementById('acp-model-select');
+            const modelInput = document.getElementById('acp-model-input');
+            if (fwd) {
+                // Forwarded provider — show free-text input for model ID
+                modelSelect.classList.add('hidden');
+                modelInput.classList.remove('hidden');
+                modelInput.placeholder = `e.g. claude-sonnet-4-6`;
+                modelInput.value = '';
+            } else {
+                // Native — show dropdown with agent's models
+                modelSelect.classList.remove('hidden');
+                modelInput.classList.add('hidden');
+            }
         }
 
         async function acpCreateSession() {
             const agentId = document.getElementById('acp-agent-select').value;
             const cwd = document.getElementById('acp-cwd-input').value;
-            const model = document.getElementById('acp-model-select').value;
+            const fwdProvider = document.getElementById('acp-fwd-select').value;
+            const model = fwdProvider
+                ? document.getElementById('acp-model-input').value.trim()
+                : document.getElementById('acp-model-select').value;
             const policy = document.getElementById('acp-policy-select').value;
             if (!agentId) { addLog('Select an agent first', 'error'); return; }
 
-            addLog(`ACP: Creating session for ${agentId}${model ? ' (' + model + ')' : ''} [${policy || 'interactive'}]...`);
+            const label = fwdProvider ? `${agentId} via ${fwdProvider}` : agentId;
+            addLog(`ACP: Creating session for ${label}${model ? ' (' + model + ')' : ''}...`);
             try {
                 const body = { agent_id: agentId, cwd };
                 if (model) body.model = model;
                 if (policy) body.approvalPolicy = policy;
+                if (fwdProvider) body.forwardedProvider = fwdProvider;
                 const data = await api('POST', '/api/acp-agent/session', body);
                 acpSessionKey = data.session.session_key;
                 document.getElementById('acp-session-info').innerHTML =

@@ -30,13 +30,14 @@ export const createAcpAgentRoutes = (sdk: RealtimeXSDK) => {
   // Create session
   router.post("/session", async (req, res) => {
     try {
-      const { agent_id, cwd, model, approvalPolicy } = req.body;
+      const { agent_id, cwd, model, approvalPolicy, forwardedProvider } = req.body;
       if (!agent_id) return res.status(400).json({ error: "agent_id required" });
       const session = await sdk.acpAgent.createSession({
         agent_id,
         cwd: cwd || process.cwd(),
         model: model || undefined,
         approvalPolicy: approvalPolicy || undefined,
+        forwardedProvider: forwardedProvider || undefined,
       });
       res.json({ session });
     } catch (err: any) {
